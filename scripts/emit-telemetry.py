@@ -28,6 +28,7 @@ def post(path: str, payload: dict) -> None:
         json.dumps(payload).encode(),
         headers={"Authorization": f"Basic {OTLP_AUTH}", "Content-Type": "application/json"},
     )
+
     urllib.request.urlopen(req).read()
 
 
@@ -35,11 +36,13 @@ def api_get(url: str) -> dict:
     req = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
                       "Accept": "application/vnd.github+json"})
+
     return json.loads(urllib.request.urlopen(req).read())
 
 
 def nano(iso_ts: str) -> int:
     dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+
     return int(dt.timestamp() * 1e9)
 
 
@@ -48,12 +51,14 @@ def attr(key: str, value) -> dict:
         v = {"stringValue": value}
     else:
         v = {"doubleValue": float(value)}
+
     return {"key": key, "value": v}
 
 
 def main() -> None:
     if not OTLP_ENDPOINT or not OTLP_AUTH:
         print("GRAFANA_OTLP_* not configured — skipping tracing")
+
         return
 
     jobs = api_get(
@@ -67,9 +72,8 @@ def main() -> None:
     now = str(int(datetime.now(timezone.utc).timestamp() * 1e9))
 
     spans, dur_points = [], []
-    for job in jobs:
-        if job["name"] == "tracing" or not job.get("completed_at"):
-            continue
+
+    for job in (j for j in jobs if j["name"] != "tracing" and j.get("completed_at")):
         name, concl = job["name"], job["conclusion"]
         start, end = nano(job["started_at"]), nano(job["completed_at"])
         dur = (end - start) // 1_000_000_000
@@ -88,28 +92,30 @@ def main() -> None:
 
     def gauge(name: str, unit: str, value: float, extra_attrs=None) -> None:
         point = {"asDouble": float(value), "timeUnixNano": now}
+
         if extra_attrs:
             point["attributes"] = extra_attrs
+
         gauges.append({"name": name, "unit": unit, "gauge": {"dataPoints": [point]}})
 
-    for csv_path in Path("dl").rglob("jacocoTestReport.csv"):
+    csv_path = next(Path("dl").rglob("jacocoTestReport.csv"), None)
+    if csv_path:
         with open(csv_path) as f:
             rows = list(csv.DictReader(f))
         covered = sum(int(r["LINE_COVERED"]) for r in rows)
         missed = sum(int(r["LINE_MISSED"]) for r in rows)
         gauge("ci.coverage.percent", "%", covered / (covered + missed) * 100 if covered + missed else 0)
-        break
 
-    for json_path in Path("dl").rglob("trivy-results.json"):
-        results = json.loads(json_path.read_text()).get("Results") or []
+    trivy_path = next(Path("dl").rglob("trivy-results.json"), None)
+    if trivy_path:
+        results = json.loads(trivy_path.read_text()).get("Results") or []
         gauge("ci.trivy.findings", "1",
               sum(len(r.get("Vulnerabilities") or []) for r in results))
-        break
 
-    for json_path in Path("dl").rglob("semgrep-results.json"):
+    semgrep_path = next(Path("dl").rglob("semgrep-results.json"), None)
+    if semgrep_path:
         gauge("ci.semgrep.findings", "1",
-              len(json.loads(json_path.read_text()).get("results", [])))
-        break
+              len(json.loads(semgrep_path.read_text()).get("results", [])))
 
     others = [j for j in jobs if j["name"] != "tracing"]
     gauge("ci.jobs.total", "1", len(others))
