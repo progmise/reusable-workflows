@@ -24,7 +24,7 @@ any structural change, reconcile it:
   (checkout → `contents`, Jobs API → `actions`, tag/release → `contents:
   write`).
 - **Consumers** — which repos pin `@v1` (currently `java-lib-template`,
-  `api-utils`); update README/AGENTS when the list grows.
+  `api-commons`); update README/AGENTS when the list grows.
 
 ## Rules
 

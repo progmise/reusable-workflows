@@ -28,18 +28,22 @@ def coords() -> tuple[str, str]:
     group = re.search(r'^group\s*=\s*"([^"]+)"', kts, re.M).group(1)
     props = open("gradle.properties").read()
     artifact = re.search(r'^POM_ARTIFACT_ID\s*=\s*(\S+)', props, re.M).group(1)
+
     return group, artifact
 
 
 def latest_published(group: str, artifact: str) -> str | None:
     url = f"{CENTRAL}/{group.replace('.', '/')}/{artifact}/maven-metadata.xml"
+
     try:
         root = ET.fromstring(urllib.request.urlopen(url, timeout=15).read())
         versions = [v.text for v in root.iter("version")]
+
         return max(versions, key=lambda v: tuple(map(int, v.split(".")))) if versions else None
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
+
         raise
 
 
@@ -51,13 +55,17 @@ def main() -> int:
     group, artifact = coords()
     new_jar = next((p for p in glob.glob("build/libs/*.jar")
                     if not p.endswith(("-sources.jar", "-javadoc.jar"))), None)
+
     if not new_jar:
         print("::error::No built jar found — run ./gradlew jar first")
+
         return 1
 
     prev = latest_published(group, artifact)
+
     if not prev:
         print("No published artifact on Maven Central — first release, no API baseline.")
+
         return 0
 
     old_jar = f"{artifact}-{prev}.jar"
@@ -67,25 +75,32 @@ def main() -> int:
     gate = "--gate" in sys.argv
     cmd = ["java", "-jar", "japicmp.jar", "-o", old_jar, "-n", new_jar,
            "-m", "-x", "japicmp.xml", "--ignore-missing-classes"]
+
     if gate:
         cmd.append("--error-on-semantic-incompatibility")
+
     result = subprocess.run(cmd)
 
     # report summary for ci-summary.py / job log
     root = ET.parse("japicmp.xml").getroot()
     breaks = []
+
     for cls in root.iter("class"):
         for elem in cls.iter("compatibilityChange"):
             breaks.append(f"{cls.get('fullyQualifiedName')}: {elem.text}")
+
     suggested = root.get("semanticVersioning", "?")
+
     print(f"Compared against `{group}:{artifact}:{prev}` — "
           f"suggested bump: `{suggested}`, binary-incompatible changes: {len(breaks)}")
+
     for b in breaks[:20]:
         print(f"  - {b}")
 
     if result.returncode != 0 and gate:
         print("::error::API change violates semantic versioning for the "
               "version being released — bump major/minor accordingly")
+              
     return result.returncode if gate else 0
 
 

@@ -30,12 +30,14 @@ def fail(msg: str) -> None:
 def read_version() -> str:
     m = re.search(r'^version\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
+
     return m.group(1) if m else ""
 
 
 def read_group() -> str:
     m = re.search(r'^group\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
+
     return m.group(1) if m else ""
 
 
@@ -43,20 +45,24 @@ def read_artifact() -> str:
     for line in open("gradle.properties"):
         if line.startswith("POM_ARTIFACT_ID="):
             return line.split("=", 1)[1].strip()
+
     return ""
 
 
 def remote_tags() -> list[str]:
     out = subprocess.run(["git", "ls-remote", "--tags", "origin"],
                          capture_output=True, text=True).stdout
+
     return [line.rsplit("refs/tags/", 1)[-1].strip() for line in out.splitlines()
             if "refs/tags/" in line]
 
 
 def central_versions(group: str, artifact: str) -> list[str]:
     url = f"{CENTRAL}/{group.replace('.', '/')}/{artifact}/maven-metadata.xml"
+
     try:
         root = ET.fromstring(urllib.request.urlopen(url, timeout=15).read())
+
         return [v.text for v in root.iter("version")]
     except urllib.error.HTTPError as e:
         return [] if e.code == 404 else fail(f"Central metadata check failed: {e}")
@@ -69,30 +75,38 @@ def main() -> None:
         fail("The Release workflow must run on main")
 
     version = read_version()
+
     if not version:
         fail("Could not read version from build.gradle.kts")
+
     if not SEMVER.match(version):
         fail(f"Not a semver X.Y.Z version: {version}")
+
     if "SNAPSHOT" in version:
         fail(f"Cannot release a SNAPSHOT version: {version}")
 
     tags = remote_tags()
+
     if version in tags:
         fail(f"Tag {version} already exists — bump the version")
 
     group, artifact = read_group(), read_artifact()
     published = central_versions(group, artifact) if group and artifact else []
+
     if version in published:
         fail(f"{group}:{artifact}:{version} is already on Maven Central")
 
     previous = [v for v in tags + published if SEMVER.match(v)]
+
     if previous:
         latest = max(previous, key=lambda v: tuple(map(int, v.split("."))))
+
         if tuple(map(int, version.split("."))) <= tuple(map(int, latest.split("."))):
             fail(f"Version {version} must be greater than the latest release {latest}")
 
     with open(os.environ["GITHUB_OUTPUT"], "a") as f:
         f.write(f"version={version}\n")
+        
     print(f"Releasing {version}")
 
 
