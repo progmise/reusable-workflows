@@ -8,5 +8,5 @@ permissions:
 
 jobs:
   release:
-    uses: ./.github/workflows/release-min.yml
+    uses: progmise/reusable-workflows/.github/workflows/release-min.yml@debug/release-min
     secrets: inherit
