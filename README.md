@@ -12,6 +12,7 @@ lives here, versioned via the `v1` tag.
 | `.github/workflows/integration.yml` | `workflow_call`: ci + JitPack SHA report |
 | `.github/workflows/release.yml` | `workflow_call`: validate → ci → publish to Maven Central → tag + GH Release → tracing |
 | `scripts/emit-telemetry.sh` | OTLP spans + gauges to Grafana Cloud (fetched via curl by the tracing job) |
+| `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl and applied with `gradle -I` |
 
 ## Caller usage
 
@@ -26,10 +27,6 @@ jobs:
     secrets: inherit
 ```
 
-Consumers must provide (they live in the consumer repo, not here):
-
-- `.github/publish.init.gradle.kts` — injects publishing + signing
-- `.github/security.init.gradle.kts` — dependency locking for Trivy
-- `.github/ci.init.gradle.kts` — JaCoCo
-- Secrets: `SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`;
-  variable `GRAFANA_OTLP_ENDPOINT`
+Consumers only need `gradle.properties` POM metadata + secrets
+(`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
+`GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.

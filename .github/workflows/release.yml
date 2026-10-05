@@ -62,7 +62,9 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_TOKEN }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
-        run: ./gradlew publishToMavenCentral --no-daemon -I .github/publish.init.gradle.kts
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/publish.init.gradle.kts -o /tmp/publish.init.gradle.kts
+          ./gradlew publishToMavenCentral --no-daemon -I /tmp/publish.init.gradle.kts
 
   release:
     needs: [validate, publish]

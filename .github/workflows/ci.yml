@@ -21,7 +21,9 @@ jobs:
         run: ./gradlew assemble --no-daemon
 
       - name: Test (with JaCoCo)
-        run: ./gradlew test --no-daemon -I .github/ci.init.gradle.kts
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/ci.init.gradle.kts -o /tmp/ci.init.gradle.kts
+          ./gradlew test --no-daemon -I /tmp/ci.init.gradle.kts
 
       - name: Coverage summary
         run: |
@@ -52,7 +54,9 @@ jobs:
           java-version: '21'
 
       - name: Generate dependency lockfile
-        run: ./gradlew dependencies --write-locks --no-daemon -I .github/security.init.gradle.kts
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/security.init.gradle.kts -o /tmp/security.init.gradle.kts
+          ./gradlew dependencies --write-locks --no-daemon -I /tmp/security.init.gradle.kts
 
       - name: Install Trivy
         run: |
