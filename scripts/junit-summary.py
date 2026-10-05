@@ -8,10 +8,13 @@ import xml.etree.ElementTree as ET
 
 total = failed = 0
 rows = []
+
+
 for path in glob.glob("dl/**/TEST-*.xml", recursive=True):
     suite = ET.parse(path).getroot()
     total += int(suite.get("tests", 0))
     failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+
     for case in suite.iter("testcase"):
         for elem in case:
             if elem.tag in ("failure", "error"):
@@ -20,10 +23,13 @@ for path in glob.glob("dl/**/TEST-*.xml", recursive=True):
 
 if total:
     print(f"### Tests — {total} run, **{failed} failed**")
+
     if failed:
         print("| Suite | Test | Error |")
         print("|---|---|---|")
+
         for r in rows[:20]:
             print("| " + " | ".join(r) + " |")
+            
         if len(rows) > 20:
             print(f"| … | and {len(rows) - 20} more — see `test-reports` artifact | |")
