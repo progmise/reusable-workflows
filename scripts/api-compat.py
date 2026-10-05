@@ -23,13 +23,17 @@ JAPICMP = ("https://repo1.maven.org/maven2/com/github/siom79/japicmp/japicmp/"
 CENTRAL = "https://repo1.maven.org/maven2"
 
 
-def coords() -> tuple[str, str]:
-    kts = open("build.gradle.kts").read()
-    group = re.search(r'^group\s*=\s*"([^"]+)"', kts, re.M).group(1)
-    props = open("gradle.properties").read()
-    artifact = re.search(r'^POM_ARTIFACT_ID\s*=\s*(\S+)', props, re.M).group(1)
+def coords() -> tuple[str, str] | None:
+    """Maven coords of the artifact this repo publishes — None for repos that
+    don't publish (services etc.), in which case the check is skipped."""
+    try:
+        kts = open("build.gradle.kts").read()
+        props = open("gradle.properties").read()
 
-    return group, artifact
+        return (re.search(r'^group\s*=\s*"([^"]+)"', kts, re.M).group(1),
+                re.search(r'^POM_ARTIFACT_ID\s*=\s*(\S+)', props, re.M).group(1))
+    except (OSError, AttributeError):
+        return None
 
 
 def latest_published(group: str, artifact: str) -> str | None:
@@ -52,7 +56,12 @@ def download(url: str, dest: str) -> None:
 
 
 def main() -> int:
-    group, artifact = coords()
+    c = coords()
+    if not c:
+        print("No POM_ARTIFACT_ID — repo doesn't publish a library artifact, "
+              "skipping API compat check.")
+        return 0
+    group, artifact = c
     new_jar = next((p for p in glob.glob("build/libs/*.jar")
                     if not p.endswith(("-sources.jar", "-javadoc.jar"))), None)
 
