@@ -41,6 +41,7 @@ jobs:
           path: |
             build/reports/tests/
             build/reports/jacoco/
+            build/test-results/
           retention-days: 30
 
   trivy:
@@ -136,6 +137,10 @@ jobs:
             echo "| Trivy (SCA + secrets) | ${{ needs.trivy.result }} |"
             echo "| Semgrep (SAST) | ${{ needs.semgrep.result }} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # Failed tests detail (JUnit XML, parsed from the test-reports artifact)
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/junit-summary.py \
+            -o junit-summary.py && python3 junit-summary.py >> "$GITHUB_STEP_SUMMARY" || true
 
           # Coverage (JaCoCo)
           CSV=$(find dl -name 'jacocoTestReport.csv' | head -1)
