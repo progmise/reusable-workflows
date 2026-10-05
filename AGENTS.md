@@ -26,7 +26,9 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   `validate-release.py` (release version validation: semver, SNAPSHOT,
   tag/published-exists, monotonic vs latest release),
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
-  mode fails on semver-violating bumps — used by release.yml)
+  mode fails on semver-violating bumps — used by release.yml).
+  `jitpack-install.sh` (bash) is the exception: JitPack install step for
+  Maven libs, invoked by each repo's `jitpack.yml` via curl.
 
 ## Conventions
 

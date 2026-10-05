@@ -11,7 +11,6 @@ allowed-tools:
 permissions:
   ask:
     - Write(src/**)
-    - Exec(./gradlew *)
 ---
 
 # Ponytail — the laziest solution that actually works

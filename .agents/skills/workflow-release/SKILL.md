@@ -21,10 +21,12 @@ There is no install step: the tag *is* the release.
 2. **Verify locally**
    ```bash
    python -c "import yaml,glob; [yaml.safe_load(open(f).read()) for f in glob.glob('.github/workflows/*.yml')]"
-   python -m py_compile scripts/emit-telemetry.py
+   python -m py_compile scripts/*.py && bash -n scripts/*.sh
    ```
-   For init scripts, run them against a consumer clone:
+   For init scripts, run them against a Gradle consumer clone:
    `cd <consumer> && ./gradlew build -I <this-repo>/init/security.init.gradle.kts`
+   (Maven consumers carry that config in `pom.xml` — verify with
+   `./mvnw -B -ntp verify` instead.)
 
 3. **Ship**
    ```bash
