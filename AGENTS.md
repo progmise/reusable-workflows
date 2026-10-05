@@ -51,6 +51,12 @@ python -c "import yaml,glob; [yaml.safe_load(open(f).read()) for f in glob.glob(
 python -m py_compile scripts/emit-telemetry.py
 ```
 
+## Branches
+
+Single `main`, no `development`. Small safe changes may go straight to `main`;
+otherwise use a short-lived branch `<type>/<kebab-description>` + PR —
+`feature/`, `fix/`, `chore/`, `docs/`, `refactor/`.
+
 ## Release
 
 Consumers pin `@v1`. To ship a change: commit → `git tag -f v1 && git push -f
