@@ -13,8 +13,15 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 ## Layout
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
-  `ci.yml`, `integration.yml`, `release.yml` (tracing is an inline job in
-  ci/release — a `uses:` nested call would show "tracing / tracing")
+  - libs: `ci.yml`, `integration.yml`, `release.yml`
+  - APIs: `api-ci.yml` (adds Build image + CSA vs lib ci), `api-integration.yml`
+    (+ Publish Image → Docker Hub), `api-release.yml` (+ Publish Image →
+    Docker Hub, Deploy → Vercel matrix `vars.DEPLOY_ENVIRONMENTS`),
+    `api-deploy.yml` (manual deploy of a tag)
+  - tracing is an inline job in every workflow — a `uses:` nested call would
+    show "tracing / tracing"; Tracing/Summary always run last, in that order
+  - job display names are Title Case (`Setup`, `Build artifact`, `SAST`,
+    `SCA`, `CSA`, `Publish Image`, `Deploy`, `Tracing`, `Summary`)
 - `init/` — Gradle init scripts fetched by the workflows via `curl` at
   `@v1` (`ci` = JaCoCo, `security` = dependency locking, `publish` = plugin +
   signing + POM) — **Gradle only**; Maven libs carry equivalent config in
@@ -24,7 +31,8 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   `ci-summary.py` (run summary: tests, coverage, findings, API compat),
   `junit-summary.py` (failed-tests section, called by ci-summary),
   `validate-release.py` (release version validation: semver, SNAPSHOT,
-  tag/published-exists, monotonic vs latest release),
+  tag/published-exists, monotonic vs latest release; `--kind api` skips the
+  Central checks for API repos),
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
   mode fails on semver-violating bumps — used by release.yml).
   `jitpack-install.sh` (bash) is the exception: JitPack install step for

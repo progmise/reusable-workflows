@@ -1,0 +1,187 @@
+name: API Release
+
+# Reusable release for API repos — invoked by each API's thin release.yml
+# (workflow_dispatch on main). Validates the version, runs all CI checks,
+# publishes the image to Docker Hub (:version + :latest), creates tag + GH
+# Release and deploys (Vercel) to every env in vars.DEPLOY_ENVIRONMENTS
+# (default: ["pro"]). Deploy is skipped silently without VERCEL_TOKEN.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\` (${{ github.sha }})"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate
+    needs: setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version
+        id: version
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/validate-release.py \
+            -o validate-release.py && python3 validate-release.py --kind api
+
+  ci:
+    name: CI
+    needs: validate
+    uses: ./.github/workflows/api-ci.yml
+    secrets: inherit
+
+  publish-image:
+    name: Publish Image
+    needs: [validate, ci]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tarball
+
+      - name: Load image
+        run: gunzip -c image.tar.gz | docker load
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Publish image
+        env:
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.event.repository.name }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          IMAGE="docker.io/${{ secrets.DOCKER_USERNAME }}/${REPO}"
+          LOCAL="local/${REPO}:${SHA}"
+          docker tag "$LOCAL" "${IMAGE}:${VERSION}"
+          docker tag "$LOCAL" "${IMAGE}:latest"
+          docker push "${IMAGE}:${VERSION}"
+          docker push "${IMAGE}:latest"
+          {
+            echo "### Published image"
+            echo "\`${IMAGE}:${VERSION}\`"
+            echo "\`${IMAGE}:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Release
+    needs: [validate, publish-image]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release (creates the tag)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
+
+  # Deploy matrix comes from the caller's DEPLOY_ENVIRONMENTS variable
+  # (JSON list, e.g. ["pro"] or ["cert","pre","pro"]). PRO-only by default.
+  deploy:
+    name: Deploy ${{ matrix.env }}
+    needs: [validate, release]
+    if: ${{ vars.VERCEL_PROJECT_ID != '' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: ${{ fromJSON(vars.DEPLOY_ENVIRONMENTS || '["pro"]') }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.version }}
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ENV: ${{ matrix.env }}
+        run: |
+          npm i -g vercel@latest
+          PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
+          URL=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
+          {
+            echo "### Deploy ${{ matrix.env }}"
+            echo "$URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Tracing + Summary close the pipeline (in that order).
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, ci, publish-image, release, deploy]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, ci, publish-image, release, deploy, tracing]
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true

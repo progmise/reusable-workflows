@@ -5,9 +5,12 @@ Checks, in order:
   1. version readable from build.gradle.kts and strictly X.Y.Z (semver)
   2. not a SNAPSHOT
   3. tag does not exist yet (git ls-remote)
-  4. version not already published on Maven Central
+  4. version not already published on Maven Central (lib kind only)
   5. version strictly greater than the latest tag AND the latest
      published version (monotonic)
+
+Usage: validate-release.py [--kind lib|api] — `--kind api` skips the Maven
+Central checks (APIs publish Docker images, not Maven artifacts).
 
 Env: GITHUB_REF_NAME (must be main), GITHUB_OUTPUT. Stdlib only."""
 
@@ -98,6 +101,8 @@ def central_versions(group: str, artifact: str) -> list[str]:
 
 
 def main() -> None:
+    kind = sys.argv[sys.argv.index("--kind") + 1] if "--kind" in sys.argv else "lib"
+
     if os.environ.get("GITHUB_REF_NAME") != "main":
         fail("The Release workflow must run on main")
 
@@ -118,7 +123,8 @@ def main() -> None:
         fail(f"Tag {version} already exists — bump the version")
 
     group, artifact = read_group(), read_artifact()
-    published = central_versions(group, artifact) if group and artifact else []
+    published = (central_versions(group, artifact)
+                 if kind == "lib" and group and artifact else [])
 
     if version in published:
         fail(f"{group}:{artifact}:{version} is already on Maven Central")
