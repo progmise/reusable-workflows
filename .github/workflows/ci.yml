@@ -152,10 +152,10 @@ jobs:
           path: dl
 
       - name: Fetch telemetry script
-        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.sh -o emit-telemetry.sh
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
 
       - name: Emit run telemetry (OTLP/HTTP)
-        run: bash emit-telemetry.sh
+        run: python3 emit-telemetry.py
 
 # ---------------------------------------------------------------------------
 # Not ported from the reference pipeline (see README "Not ported"):
