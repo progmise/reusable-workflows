@@ -8,9 +8,9 @@ lives here, versioned via the `v1` tag.
 
 | File | Purpose |
 |---|---|
-| `.github/workflows/ci.yml` | `workflow_call`: build+test (JaCoCo) ‖ Trivy ‖ Semgrep ‖ API compat (japicmp, report-only) → summary → tracing |
+| `.github/workflows/ci.yml` | `workflow_call`: Setup → Build+test (JaCoCo) → SCA (Trivy) ‖ SAST (Semgrep) ‖ API Compat (japicmp) → Tracing → Summary |
 | `.github/workflows/integration.yml` | `workflow_call`: ci + JitPack SHA report |
-| `.github/workflows/release.yml` | `workflow_call`: validate (semver + monotonic + not-published) → ci → compat gate → publish to Maven Central → tag + GH Release → tracing → summary |
+| `.github/workflows/release.yml` | `workflow_call`: Setup → Validate (semver + monotonic + not-published) → CI → Compat gate → Publish to Maven Central → tag + GH Release → Tracing → Summary |
 | `scripts/*.py` | telemetry + run-summary emitters (Python stdlib, fetched via curl at `@v1`) |
 | `scripts/jitpack-install.sh` | JitPack install step for Maven libs (sdkman maven + `mvn install`) — called from each repo's thin `jitpack.yml` |
 | `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl — Maven libs use their `pom.xml` config instead |

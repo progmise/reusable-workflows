@@ -48,3 +48,6 @@ There is no install step: the tag *is* the release.
   their top-level `permissions`.
 - Forgetting to move the tag is the #1 silent failure: the run passes but
   uses the old code. Check the commit SHA the tag points to when in doubt.
+- `v1` must be a **lightweight** tag (`git tag -f v1`, no `-a`/`-m`). An
+  annotated tag resolves to the tag-object SHA, so `uses: …@v1` dies with
+  `startup_failure` and zero jobs — no logs, no annotations.

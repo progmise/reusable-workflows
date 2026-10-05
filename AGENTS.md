@@ -65,3 +65,7 @@ Consumers pin `@v1`. To ship a change: commit → `git tag -f v1 && git push -f
 origin v1` → the next run in any consumer picks it up. For a breaking change
 (mandatory inputs, renamed secrets), bump a new tag and update callers instead
 of moving `v1` silently — see the `workflow-release` skill.
+
+**`v1` must stay a lightweight tag.** An annotated tag resolves to the tag
+*object* SHA (not the commit), so `uses: …@v1` fails with `startup_failure`
+and zero jobs. `git tag -f v1` (no `-a`) is lightweight — correct.
