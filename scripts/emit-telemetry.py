@@ -73,7 +73,7 @@ def main() -> None:
 
     spans, dur_points = [], []
 
-    for job in (j for j in jobs if j["name"] != "tracing" and j.get("completed_at")):
+    for job in (j for j in jobs if "tracing" not in j["name"] and j.get("completed_at")):
         name, concl = job["name"], job["conclusion"]
         start, end = nano(job["started_at"]), nano(job["completed_at"])
         dur = (end - start) // 1_000_000_000
@@ -121,7 +121,7 @@ def main() -> None:
         gauge("ci.semgrep.findings", "1",
               len(json.loads(semgrep_path.read_text()).get("results", [])))
 
-    others = [j for j in jobs if j["name"] != "tracing"]
+    others = [j for j in jobs if "tracing" not in j["name"]]
     gauge("ci.jobs.total", "1", len(others))
     gauge("ci.jobs.failed", "1",
           sum(1 for j in others if j["conclusion"] in ("failure", "cancelled")))

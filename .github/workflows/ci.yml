@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +47,8 @@ jobs:
           retention-days: 30
 
   trivy:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +98,8 @@ jobs:
           retention-days: 30
 
   semgrep:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -128,89 +134,19 @@ jobs:
           path: dl
 
       - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          {
-            echo "### CI Checks results"
-            echo "| Job | Result |"
-            echo "|---|---|"
-            echo "| Build + Test | ${{ needs.build.result }} |"
-            echo "| Trivy (SCA + secrets) | ${{ needs.trivy.result }} |"
-            echo "| Semgrep (SAST) | ${{ needs.semgrep.result }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true
 
-          # Failed tests detail (JUnit XML, parsed from the test-reports artifact)
-          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/junit-summary.py \
-            -o junit-summary.py && python3 junit-summary.py >> "$GITHUB_STEP_SUMMARY" || true
-
-          # Coverage (JaCoCo)
-          CSV=$(find dl -name 'jacocoTestReport.csv' | head -1)
-          if [ -n "$CSV" ]; then
-            awk -F',' 'NR>1 {lm+=$8; lc+=$9} END {
-              printf "### Coverage\n- Lines: **%.1f%%** (%d/%d)\n",
-                (lc+lm)? lc/(lc+lm)*100 : 0, lc, lc+lm
-            }' "$CSV" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # Trivy findings detail
-          TJ=$(find dl -name 'trivy-results.json' | head -1)
-          if [ -n "$TJ" ]; then
-            N=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$TJ")
-            {
-              echo "### Trivy — $N finding(s) (CRITICAL/HIGH)"
-              if [ "$N" -gt 0 ]; then
-                echo "| Severity | CVE | Package | Installed | Fixed |"
-                echo "|---|---|---|---|---|"
-                jq -r '.Results[]? | .Vulnerabilities[]? |
-                  "| \(.Severity) | \(.VulnerabilityID) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "—") |"' \
-                  "$TJ" | head -20
-                [ "$N" -gt 20 ] && echo "| … | and $((N-20)) more — see \`trivy-report\` artifact | | | |"
-              fi
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # Semgrep findings detail
-          SJ=$(find dl -name 'semgrep-results.json' | head -1)
-          if [ -n "$SJ" ]; then
-            N=$(jq '.results | length' "$SJ")
-            {
-              echo "### Semgrep — $N finding(s)"
-              if [ "$N" -gt 0 ]; then
-                echo "| Severity | Rule | Location |"
-                echo "|---|---|---|"
-                jq -r '.results[]? |
-                  "| \(.extra.severity) | \(.check_id) | \(.path):\(.start.line) |"' \
-                  "$SJ" | head -20
-                [ "$N" -gt 20 ] && echo "| … | and $((N-20)) more — see \`semgrep-report\` artifact | |"
-              fi
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  # Emits spans (real durations, via the Jobs API) + gauges (coverage,
-  # findings, job durations) to Grafana Cloud via OTLP/HTTP. Skips silently
-  # unless the GRAFANA_OTLP_ENDPOINT variable + GRAFANA_OTLP_AUTH secret are set.
+  # Tracing lives in telemetry.yml (shared with release.yml) — emits spans +
+  # gauges to Grafana Cloud; skips silently without GRAFANA_OTLP_* config.
   tracing:
-    runs-on: ubuntu-latest
     if: always()
     needs: [build, trivy, semgrep]
-    permissions:
-      actions: read
-    env:
-      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
-      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Download run reports
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          pattern: '*-report*'
-          path: dl
-
-      - name: Fetch telemetry script
-        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
-
-      - name: Emit run telemetry (OTLP/HTTP)
-        run: python3 emit-telemetry.py
+    uses: ./.github/workflows/telemetry.yml
+    secrets: inherit
 
 # ---------------------------------------------------------------------------
 # Not ported from the reference pipeline (see README "Not ported"):

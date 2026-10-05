@@ -13,12 +13,15 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 ## Layout
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
-  `ci.yml`, `integration.yml`, `release.yml`
+  `ci.yml`, `integration.yml`, `release.yml`, `telemetry.yml` (shared
+  tracing job called by ci/release)
 - `init/` — Gradle init scripts fetched by the workflows via `curl` at
   `@v1` (`ci` = JaCoCo, `security` = dependency locking, `publish` = plugin +
   signing + POM)
-- `scripts/emit-telemetry.py` — OTLP spans/gauges to Grafana Cloud
-  (Python 3 stdlib only — no pip installs)
+- `scripts/` — Python 3 stdlib only (no pip installs):
+  `emit-telemetry.py` (OTLP spans/gauges → Grafana Cloud),
+  `ci-summary.py` (run summary: tests, coverage, findings),
+  `junit-summary.py` (failed-tests section, called by ci-summary)
 
 ## Conventions
 

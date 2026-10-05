@@ -13,6 +13,8 @@ permissions:
 
 jobs:
   validate:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -47,6 +49,8 @@ jobs:
 
   publish:
     needs: [validate, ci]
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +72,8 @@ jobs:
 
   release:
     needs: [validate, publish]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,29 +84,10 @@ jobs:
           tag_name: ${{ needs.validate.outputs.version }}
           generate_release_notes: true
 
-  # Emits spans (real durations, via the Jobs API) + gauges to Grafana Cloud
-  # via OTLP/HTTP. Skips silently unless the GRAFANA_OTLP_ENDPOINT variable +
-  # GRAFANA_OTLP_AUTH secret are set.
+  # Tracing lives in telemetry.yml (shared with ci.yml) — emits spans +
+  # gauges to Grafana Cloud; skips silently without GRAFANA_OTLP_* config.
   tracing:
-    runs-on: ubuntu-latest
     if: always()
     needs: [validate, ci, publish, release]
-    permissions:
-      actions: read
-    env:
-      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
-      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Download run reports
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          pattern: '*-report*'
-          path: dl
-
-      - name: Fetch telemetry script
-        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
-
-      - name: Emit run telemetry (OTLP/HTTP)
-        run: python3 emit-telemetry.py
+    uses: ./.github/workflows/telemetry.yml
+    secrets: inherit

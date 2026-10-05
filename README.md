@@ -11,7 +11,8 @@ lives here, versioned via the `v1` tag.
 | `.github/workflows/ci.yml` | `workflow_call`: build+test (JaCoCo) ‖ Trivy ‖ Semgrep → summary → tracing |
 | `.github/workflows/integration.yml` | `workflow_call`: ci + JitPack SHA report |
 | `.github/workflows/release.yml` | `workflow_call`: validate → ci → publish to Maven Central → tag + GH Release → tracing |
-| `scripts/emit-telemetry.py` | OTLP spans + gauges to Grafana Cloud (Python stdlib, fetched via curl by the tracing job) |
+| `.github/workflows/telemetry.yml` | `workflow_call`: shared OTLP tracing job (spans + gauges → Grafana Cloud) |
+| `scripts/*.py` | telemetry + run-summary emitters (Python stdlib, fetched via curl at `@v1`) |
 | `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl and applied with `gradle -I` |
 
 ## Caller usage
