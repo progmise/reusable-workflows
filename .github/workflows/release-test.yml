@@ -1,0 +1,12 @@
+name: ReleaseTest
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-min.yml
+    secrets: inherit
