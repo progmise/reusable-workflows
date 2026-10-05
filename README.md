@@ -28,7 +28,7 @@ jobs:
 ```
 
 Also ships `AGENTS.md`, `LICENSE` (Apache 2.0) and `.agents/skills/`
-(`workflow-release`, `maintain-agents-doc`, `ponytail`).
+(`workflow-release`, `workflow-review`, `maintain-agents-doc`, `ponytail`).
 
 Consumers only need `gradle.properties` POM metadata + secrets
 (`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
