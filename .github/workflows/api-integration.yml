@@ -85,7 +85,8 @@ jobs:
   deploy:
     name: Deploy
     needs: [publish-image, deploy-envs]
-    if: ${{ vars.VERCEL_PROJECT_ID != '' }}
+    # Empty matrix (no non-pro envs) fails the job on GitHub — skip it instead.
+    if: ${{ vars.VERCEL_PROJECT_ID != '' && needs.deploy-envs.outputs.envs != '[]' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
