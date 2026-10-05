@@ -39,13 +39,18 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   mode fails on semver-violating bumps — used by release.yml).
   `jitpack-install.sh` (bash) is the exception: JitPack install step for
   Maven libs, invoked by each repo's `jitpack.yml` via curl.
+- `docs/` — `flows.md` (mermaid map of every pipeline — keep synced when
+  jobs change), `orchestrator.md` (Gluon/OAM analysis + `deploy-manifest`
+  design, paused work).
 
 ## Conventions
 
 - **Zero hard dependencies on consumer files**: workflows fetch `init/` and
   `scripts/` from this repo at runtime (`raw.githubusercontent.com/.../@v1`).
   Only the build files come from the caller: `pom.xml`+`mvnw` (Maven libs) or
-  `build.gradle.kts`/`gradlew`/`gradle.properties` (Gradle libs).
+  `build.gradle.kts`/`gradlew`/`gradle.properties` (Gradle libs); API repos
+  additionally ship a self-contained root `Dockerfile` (multi-stage source
+  build — CI, compose and Vercel all use the same file).
 - **Multi build tool**: every build step exists in two variants gated by
   `if: hashFiles('pom.xml')` — Maven when the pom exists, Gradle otherwise.
   Keep both branches in sync when touching a step.
@@ -55,6 +60,9 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   calls another reusable workflow, repeat `secrets: inherit` on the inner call.
 - Reusable workflows pin the `@v1` tag when self-fetching scripts — when
   changing a fetched file, move `v1` to the new commit.
+- **Empty matrix jobs fail the run**: a `matrix` that expands to `[]` marks
+  the job failed (it doesn't even appear in the job list). Guard matrix jobs
+  with a job-level `if:` on the setup output (see `api-integration` deploy).
 
 ## Verify before done
 
