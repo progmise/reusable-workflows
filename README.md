@@ -39,8 +39,10 @@ Consumers only need their build files (`pom.xml`+`mvnw`, or Gradle equivalents) 
 (`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.
 
-API consumers additionally need: `Dockerfile` (+ `Dockerfile.vercel` for
-Vercel deploys), secret `DOCKER_TOKEN` (image publish) and optional secret
+API consumers additionally need: a self-contained `Dockerfile` at the repo
+root (multi-stage source build — the same file is used by `docker build`,
+compose and Vercel, which builds it automatically), secret `DOCKER_TOKEN`
+(image publish) and optional secret
 `VERCEL_TOKEN`, and vars `DOCKER_USERNAME` (image namespace — public info,
 kept as var so image names aren't masked in logs), `VERCEL_ORG_ID`/
 `VERCEL_PROJECT_ID` + `DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default —
