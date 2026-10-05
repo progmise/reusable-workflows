@@ -20,6 +20,10 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
     `vars.DEPLOY_ENVIRONMENTS`), `api-release.yml` (+ Publish Image +
     tag/Release — **never deploys**), `api-deploy.yml` (manual deploy of a
     tag to one env, validated against `DEPLOY_ENVIRONMENTS`)
+  - orchestrator: `orch-ci.yml`/`orch-release.yml`/`orch-deploy.yml` — called
+    only by `deploy-manifest` (manifest validation → draft release →
+    topo-sorted dispatch of each repo's `deploy.yml`, level by level);
+    needs `ORCHESTRATOR_TOKEN` (PAT with `actions:write` on consumers)
   - tracing is an inline job in every workflow — a `uses:` nested call would
     show "tracing / tracing"; Tracing/Summary always run last, in that order
   - job display names are Title Case (`Setup`, `Build artifact`, `SAST`,
@@ -36,12 +40,15 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   tag/published-exists, monotonic vs latest release; `--kind api` skips the
   Central checks for API repos),
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
-  mode fails on semver-violating bumps — used by release.yml).
+  mode fails on semver-violating bumps — used by release.yml),
+  `topo-deploy.py` (`validate`/`plan`/`deploy` for `deploy-manifest` — strict
+  stdlib parser for `manifest.yml`, Kahn topo levels, mermaid, `gh workflow
+  run` dispatch + conclusion polling).
   `jitpack-install.sh` (bash) is the exception: JitPack install step for
   Maven libs, invoked by each repo's `jitpack.yml` via curl.
 - `docs/` — `flows.md` (mermaid map of every pipeline — keep synced when
   jobs change), `orchestrator.md` (Gluon/OAM analysis + `deploy-manifest`
-  design, paused work).
+  design — implemented: `orch-*` workflows + `topo-deploy.py`).
 
 ## Conventions
 

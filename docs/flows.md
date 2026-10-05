@@ -34,6 +34,18 @@ flowchart LR
     L_PR --> RW_CI
     L_PUSH --> RW_IN
     L_REL --> RW_RE
+    subgraph MAN["deploy-manifest repo"]
+        M_PR["PR → main<br/><code>ci.yml</code> caller"]
+        M_PUSH["merge → main<br/><code>release.yml</code> caller"]
+        M_DEP["dispatch<br/><code>deploy.yml</code> caller"]
+    end
+    RW_OCI[orch-ci.yml]
+    RW_ORE[orch-release.yml]
+    RW_ODE[orch-deploy.yml]
+    M_PR --> RW_OCI
+    M_PUSH --> RW_ORE
+    M_DEP --> RW_ODE
+    RW_ODE -. "dispatches deploy.yml<br/>per component repo" .-> A_DEP
 ```
 
 ---
@@ -136,6 +148,42 @@ flowchart TD
   preview for the rest.
 
 ---
+
+## Orchestrator pipelines (`deploy-manifest`)
+
+### `orch-ci.yml` — PR on the manifest
+
+```mermaid
+flowchart LR
+    V["Validate manifest<br/>schema · semver · tags exist<br/>images exist on Docker Hub"] --> P["Deploy plan<br/>(mermaid in summary)"]
+```
+
+### `orch-release.yml` — merge to main
+
+```mermaid
+flowchart LR
+    V[Validate + plan] --> R["draft Release v&lt;version&gt;"]
+```
+
+Publishing the draft is the approval gate — `orch-deploy` refuses drafts.
+
+### `orch-deploy.yml` — manual dispatch `{version, environment}`
+
+```mermaid
+flowchart TD
+    S[Setup] --> D["Deploy {env}"]
+    D --> T[Tracing]
+    T --> SUM[Summary]
+    subgraph D2[" "]
+        direction LR
+        L1["level 1:<br/>dispatch component deploys"] --> L2["level 2:<br/>wait, then dispatch"]
+    end
+```
+
+`topo-deploy.py deploy` checks out `manifest.yml` at the release tag,
+Kahn-sorts components into levels, runs `gh workflow run deploy.yml` on each
+component repo (`ORCHESTRATOR_TOKEN`, needs `actions:write`) and polls each
+run to conclusion before starting the next level.
 
 ## Lib pipelines
 

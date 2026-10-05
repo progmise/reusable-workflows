@@ -1,7 +1,7 @@
 # Deploy Orchestrator — análisis y diseño progmise
 
-> Estado: **análisis completo, implementación pendiente** (pausado 2026-10-05;
-> retomar después de correcciones en workflows/template).
+> Estado: **implementado** (2026-10-05) — `orch-ci`/`orch-release`/`orch-deploy`
+> + `scripts/topo-deploy.py`, caller repo `progmise/deploy-manifest`.
 > Referencias extraídas de `C:\Users\Leonel\Documents\temporal\e\orchester.zip`
 > (capturas UI Gluon + workflows + logs) y `flow.zip` (capturas de jobs).
 
