@@ -90,18 +90,22 @@ jobs:
           sudo mv trivy /usr/local/bin/
           trivy version
 
+      # Binary + retry instead of trivy-action: Maven Central rate-limits
+      # (429 + Retry-After) and the action has no retry. Transient 429s retry
+      # with backoff; a real finding set still exits 1.
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          scanners: 'vuln,secret'
-          severity: 'CRITICAL,HIGH'
-          skip-setup-trivy: true
-          ignore-unfixed: true
-          exit-code: '1'
-          format: 'json'
-          output: 'trivy-results.json'
+        run: |
+          for attempt in 1 2 3; do
+            trivy fs --scanners vuln,secret --severity CRITICAL,HIGH \
+              --ignore-unfixed --format json --output trivy-results.json . && break
+            code=$?
+            [ "$attempt" -eq 3 ] && exit "$code"
+            sleep $((attempt * 60))
+          done
+          # non-zero from findings (not infra) must still fail the job
+          test -f trivy-results.json || exit 1
+          count=$(jq '[.Results[]?.Vulnerabilities // empty | length] | add // 0' trivy-results.json)
+          [ "$count" -eq 0 ] || exit 1
 
       - name: Trivy findings
         if: always()
