@@ -55,7 +55,7 @@ python -m py_compile scripts/emit-telemetry.py
 
 Single `main`, no `development`. Small safe changes may go straight to `main`;
 otherwise use a short-lived branch `<type>/<snake_description>` + PR —
-`feature/`, `fix/`, `bug/`, `chore/`, `docs/`, `refactor/`.
+`feature/`, `fix/`, `chore/`, `docs/`, `refactor/`.
 
 ## Release
 
