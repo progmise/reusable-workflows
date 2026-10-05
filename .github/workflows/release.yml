@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   validate:
+    name: Validate
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -28,12 +29,14 @@ jobs:
             -o validate-release.py && python3 validate-release.py
 
   ci:
+    name: CI
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
   # Gate: japicmp fails the release when the API diff is incompatible with the
   # version bump being made (semver rules, incl. 0.x). Report stays in ci.yml.
   compat:
+    name: Compat
     needs: validate
     permissions:
       contents: read
@@ -60,6 +63,7 @@ jobs:
             -o api-compat.py && python3 api-compat.py --gate
 
   publish:
+    name: Publish
     needs: [validate, ci, compat]
     permissions:
       contents: read
@@ -100,6 +104,7 @@ jobs:
           ./mvnw -B -ntp -Prelease deploy -s /tmp/maven-settings.xml -Dgpg.passphrase="$GPG_PASSPHRASE"
 
   release:
+    name: Release
     needs: [validate, publish]
     permissions:
       contents: write
@@ -113,10 +118,50 @@ jobs:
           tag_name: ${{ needs.validate.outputs.version }}
           generate_release_notes: true
 
-  # Tracing lives in telemetry.yml (shared with ci.yml) — emits spans +
-  # gauges to Grafana Cloud; skips silently without GRAFANA_OTLP_* config.
+  # Tracing + Summary close the pipeline (in that order). Tracing emits spans +
+  # gauges to Grafana Cloud via OTLP/HTTP; skips silently without
+  # GRAFANA_OTLP_ENDPOINT (var) + GRAFANA_OTLP_AUTH (secret).
   tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
     if: always()
     needs: [validate, ci, compat, publish, release]
-    uses: ./.github/workflows/telemetry.yml
-    secrets: inherit
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [validate, ci, compat, publish, release, tracing]
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true

@@ -13,8 +13,8 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 ## Layout
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
-  `ci.yml`, `integration.yml`, `release.yml`, `telemetry.yml` (shared
-  tracing job called by ci/release)
+  `ci.yml`, `integration.yml`, `release.yml` (tracing is an inline job in
+  ci/release — a `uses:` nested call would show "tracing / tracing")
 - `init/` — Gradle init scripts fetched by the workflows via `curl` at
   `@v1` (`ci` = JaCoCo, `security` = dependency locking, `publish` = plugin +
   signing + POM) — **Gradle only**; Maven libs carry equivalent config in

@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    name: Build
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -60,6 +61,7 @@ jobs:
           retention-days: 30
 
   trivy:
+    name: SCA
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -123,6 +125,7 @@ jobs:
           retention-days: 30
 
   api-compat:
+    name: API Compat
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -156,6 +159,7 @@ jobs:
           retention-days: 30
 
   semgrep:
+    name: SAST
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -179,10 +183,40 @@ jobs:
           path: semgrep-results.json
           retention-days: 30
 
-  summary:
+  # Tracing + Summary close the pipeline (in that order). Tracing emits spans +
+  # gauges to Grafana Cloud via OTLP/HTTP; skips silently without
+  # GRAFANA_OTLP_ENDPOINT (var) + GRAFANA_OTLP_AUTH (secret). Summary needs
+  # tracing so it always renders last.
+  tracing:
+    name: Tracing
     runs-on: ubuntu-latest
     if: always()
     needs: [build, trivy, semgrep, api-compat]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build, trivy, semgrep, api-compat, tracing]
     steps:
       - name: Download run reports
         uses: actions/download-artifact@v4
@@ -197,14 +231,6 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
             -o ci-summary.py && python3 ci-summary.py || true
-
-  # Tracing lives in telemetry.yml (shared with release.yml) — emits spans +
-  # gauges to Grafana Cloud; skips silently without GRAFANA_OTLP_* config.
-  tracing:
-    if: always()
-    needs: [build, trivy, semgrep, api-compat]
-    uses: ./.github/workflows/telemetry.yml
-    secrets: inherit
 
 # ---------------------------------------------------------------------------
 # Not ported from the reference pipeline (see README "Not ported"):
