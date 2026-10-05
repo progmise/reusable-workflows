@@ -27,7 +27,24 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def pom() -> ET.Element | None:
+    return ET.parse("pom.xml").getroot() if os.path.exists("pom.xml") else None
+
+
+def pom_text(root: ET.Element, tag: str) -> str:
+    # top-level only; falls back to <parent> for groupId/version inheritance
+    ns = "{http://maven.apache.org/POM/4.0.0}"
+
+    return (root.findtext(f"{ns}{tag}") or
+            root.findtext(f"{ns}parent/{ns}{tag}") or "")
+
+
 def read_version() -> str:
+    root = pom()
+
+    if root is not None:
+        return pom_text(root, "version")
+
     m = re.search(r'^version\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
 
@@ -35,6 +52,11 @@ def read_version() -> str:
 
 
 def read_group() -> str:
+    root = pom()
+
+    if root is not None:
+        return pom_text(root, "groupId")
+
     m = re.search(r'^group\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
 
@@ -42,6 +64,11 @@ def read_group() -> str:
 
 
 def read_artifact() -> str:
+    root = pom()
+
+    if root is not None:
+        return pom_text(root, "artifactId")
+
     for line in open("gradle.properties"):
         if line.startswith("POM_ARTIFACT_ID="):
             return line.split("=", 1)[1].strip()
@@ -77,7 +104,7 @@ def main() -> None:
     version = read_version()
 
     if not version:
-        fail("Could not read version from build.gradle.kts")
+        fail("Could not read version from build.gradle.kts / pom.xml")
 
     if not SEMVER.match(version):
         fail(f"Not a semver X.Y.Z version: {version}")

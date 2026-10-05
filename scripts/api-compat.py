@@ -27,6 +27,14 @@ def coords() -> tuple[str, str] | None:
     """Maven coords of the artifact this repo publishes — None for repos that
     don't publish (services etc.), in which case the check is skipped."""
     try:
+        if os.path.exists("pom.xml"):
+            ns = "{http://maven.apache.org/POM/4.0.0}"
+            root = ET.parse("pom.xml").getroot()
+            group = (root.findtext(f"{ns}groupId") or
+                     root.findtext(f"{ns}parent/{ns}groupId"))
+
+            return group, root.findtext(f"{ns}artifactId")
+
         kts = open("build.gradle.kts").read()
         props = open("gradle.properties").read()
 
@@ -62,11 +70,11 @@ def main() -> int:
               "skipping API compat check.")
         return 0
     group, artifact = c
-    new_jar = next((p for p in glob.glob("build/libs/*.jar")
+    new_jar = next((p for p in glob.glob("build/libs/*.jar") + glob.glob("target/*.jar")
                     if not p.endswith(("-sources.jar", "-javadoc.jar"))), None)
 
     if not new_jar:
-        print("::error::No built jar found — run ./gradlew jar first")
+        print("::error::No built jar found — run the package step first")
 
         return 1
 

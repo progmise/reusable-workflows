@@ -35,7 +35,7 @@ def section_failed_tests() -> list[str]:
 
 
 def section_coverage() -> list[str]:
-    csv_path = first("jacocoTestReport.csv")
+    csv_path = first("jacoco*.csv")  # jacocoTestReport.csv (Gradle) / jacoco.csv (Maven)
 
     if not csv_path:
         return []

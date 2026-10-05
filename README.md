@@ -13,7 +13,7 @@ lives here, versioned via the `v1` tag.
 | `.github/workflows/release.yml` | `workflow_call`: validate (semver + monotonic + not-published) → ci → compat gate → publish to Maven Central → tag + GH Release → tracing |
 | `.github/workflows/telemetry.yml` | `workflow_call`: shared OTLP tracing job (spans + gauges → Grafana Cloud) |
 | `scripts/*.py` | telemetry + run-summary emitters (Python stdlib, fetched via curl at `@v1`) |
-| `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl and applied with `gradle -I` |
+| `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl — Maven libs use their `pom.xml` config instead |
 
 ## Caller usage
 
@@ -31,6 +31,6 @@ jobs:
 Also ships `AGENTS.md`, `LICENSE` (Apache 2.0) and `.agents/skills/`
 (`workflow-release`, `workflow-review`, `maintain-agents-doc`, `ponytail`).
 
-Consumers only need `gradle.properties` POM metadata + secrets
+Consumers only need their build files (`pom.xml`+`mvnw`, or Gradle equivalents) + secrets
 (`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.

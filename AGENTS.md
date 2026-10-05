@@ -17,7 +17,8 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   tracing job called by ci/release)
 - `init/` — Gradle init scripts fetched by the workflows via `curl` at
   `@v1` (`ci` = JaCoCo, `security` = dependency locking, `publish` = plugin +
-  signing + POM)
+  signing + POM) — **Gradle only**; Maven libs carry equivalent config in
+  `pom.xml` (JaCoCo + central-publishing + `release` profile for signing)
 - `scripts/` — Python 3 stdlib only (no pip installs):
   `emit-telemetry.py` (OTLP spans/gauges → Grafana Cloud),
   `ci-summary.py` (run summary: tests, coverage, findings, API compat),
@@ -31,7 +32,11 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 
 - **Zero hard dependencies on consumer files**: workflows fetch `init/` and
   `scripts/` from this repo at runtime (`raw.githubusercontent.com/.../@v1`).
-  Only `build.gradle.kts`/`gradlew`/`gradle.properties` come from the caller.
+  Only the build files come from the caller: `pom.xml`+`mvnw` (Maven libs) or
+  `build.gradle.kts`/`gradlew`/`gradle.properties` (Gradle libs).
+- **Multi build tool**: every build step exists in two variants gated by
+  `if: hashFiles('pom.xml')` — Maven when the pom exists, Gradle otherwise.
+  Keep both branches in sync when touching a step.
 - **Never read a secret into logs**; `GRAFANA_OTLP_AUTH` etc. only reach
   `Authorization` headers.
 - `secrets: inherit` propagates consumer secrets; when a reusable workflow

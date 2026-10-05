@@ -46,9 +46,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Build jar (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: ./gradlew jar --no-daemon
+
+      - name: Build jar (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests package
+
       - name: API compatibility gate
         run: |
-          ./gradlew jar --no-daemon
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/api-compat.py \
             -o api-compat.py && python3 api-compat.py --gate
 
@@ -65,7 +72,8 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Publish to Maven Central
+      - name: Publish to Maven Central (Gradle)
+        if: hashFiles('pom.xml') == ''
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_TOKEN }}
@@ -74,6 +82,22 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/publish.init.gradle.kts -o /tmp/publish.init.gradle.kts
           ./gradlew publishToMavenCentral --no-daemon -I /tmp/publish.init.gradle.kts
+
+      # Maven: the pom carries the central-publishing plugin; credentials go in
+      # a generated settings.xml, the GPG key is imported in-memory, and the
+      # `release` profile activates artifact signing.
+      - name: Publish to Maven Central (Maven)
+        if: hashFiles('pom.xml') != ''
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_TOKEN: ${{ secrets.SONATYPE_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          printf '<settings><servers><server><id>central</id><username>%s</username><password>%s</password></server></servers></settings>' \
+            "$SONATYPE_USERNAME" "$SONATYPE_TOKEN" > /tmp/maven-settings.xml
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          ./mvnw -B -ntp -Prelease deploy -s /tmp/maven-settings.xml -Dgpg.passphrase="$GPG_PASSPHRASE"
 
   release:
     needs: [validate, publish]

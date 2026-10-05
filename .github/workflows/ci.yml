@@ -19,21 +19,32 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build
+      - name: Build (Gradle)
+        if: hashFiles('pom.xml') == ''
         run: ./gradlew assemble --no-daemon
 
-      - name: Test (with JaCoCo)
+      - name: Build (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests package
+
+      - name: Test + JaCoCo (Gradle)
+        if: hashFiles('pom.xml') == ''
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/ci.init.gradle.kts -o /tmp/ci.init.gradle.kts
           ./gradlew test --no-daemon -I /tmp/ci.init.gradle.kts
 
+      - name: Test + JaCoCo (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp test
+
       - name: Coverage summary
         run: |
-          awk -F',' 'NR>1 {lm+=$8; lc+=$9; bm+=$6; bc+=$7} END {
+          CSV=$(find build target -name 'jacoco*.csv' 2>/dev/null | head -1)
+          test -n "$CSV" && awk -F',' 'NR>1 {lm+=$8; lc+=$9; bm+=$6; bc+=$7} END {
             printf "### Coverage\n" >> ENVIRON["GITHUB_STEP_SUMMARY"]
             printf "- Lines: **%.1f%%** (%d/%d)\n", lc/(lc+lm)*100, lc, lc+lm >> ENVIRON["GITHUB_STEP_SUMMARY"]
             printf "- Branches: **%.1f%%** (%d/%d)\n", (bc+bm)? bc/(bc+bm)*100 : 100, bc, bc+bm >> ENVIRON["GITHUB_STEP_SUMMARY"]
-          }' build/reports/jacoco/test/jacocoTestReport.csv
+          }' "$CSV" || true
 
       - name: Upload test & coverage reports
         uses: actions/upload-artifact@v4
@@ -44,6 +55,8 @@ jobs:
             build/reports/tests/
             build/reports/jacoco/
             build/test-results/
+            target/surefire-reports/
+            target/site/jacoco/
           retention-days: 30
 
   trivy:
@@ -58,7 +71,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Gradle needs a lockfile for Trivy; Maven repos are scanned via pom.xml.
       - name: Generate dependency lockfile
+        if: hashFiles('pom.xml') == ''
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/security.init.gradle.kts -o /tmp/security.init.gradle.kts
           ./gradlew dependencies --write-locks --no-daemon -I /tmp/security.init.gradle.kts
@@ -109,9 +124,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Build jar (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: ./gradlew jar --no-daemon
+
+      - name: Build jar (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests package
+
       - name: API compatibility report
         run: |
-          ./gradlew jar --no-daemon
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/api-compat.py \
             -o api-compat.py && python3 api-compat.py
 
