@@ -1,0 +1,109 @@
+name: Orchestrator Deploy
+
+# Reusable — called by the deploy-manifest repo via workflow_dispatch.
+# Deploys a published manifest release: checks out manifest.yml at the
+# release tag, topo-sorts components and dispatches each repo's deploy.yml
+# (api-deploy) level by level, polling each run to conclusion.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Manifest release version (e.g. 1.0.0)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment (pro, cert, pre)'
+        required: false
+        default: 'pro'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.in.outputs.version }}
+      environment: ${{ steps.in.outputs.environment }}
+    steps:
+      - name: Inputs
+        id: in
+        env:
+          ALLOWED: ${{ vars.DEPLOY_ENVIRONMENTS }}
+        run: |
+          V="${{ inputs.version }}"
+          E="${{ inputs.environment }}"
+          echo "$V" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "::error::version '$V' is not semver"; exit 1; }
+          ENVIRONMENT="${E:-pro}"
+          ENVS="${ALLOWED:-[\"pro\"]}"
+          echo "$ENVS" | jq -e --arg e "$ENVIRONMENT" 'index($e)' >/dev/null || {
+            echo "::error::environment '$ENVIRONMENT' not in DEPLOY_ENVIRONMENTS ($ENVS)"
+            exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy ${{ needs.setup.outputs.environment }}
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout manifest at release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.setup.outputs.version }}
+
+      - name: Release must be published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRAFT=$(gh release view "v${{ needs.setup.outputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)
+          [ "$DRAFT" = "false" ] || {
+            echo "::error::release v${{ needs.setup.outputs.version }} is still a draft — publish it first"
+            exit 1; }
+
+      - name: Fetch topo-deploy script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o topo-deploy.py
+
+      - name: Deploy plan
+        run: python topo-deploy.py plan manifest.yml
+
+      - name: Orchestrated deploy
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
+        run: python topo-deploy.py deploy manifest.yml --env=${{ needs.setup.outputs.environment }}
+
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, deploy]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, deploy, tracing]
+    steps:
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true

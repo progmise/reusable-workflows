@@ -1,0 +1,40 @@
+name: Orchestrator Release
+
+# Reusable — called by the deploy-manifest repo on merge to main.
+# Topo-sorts the manifest, renders the dependency graph in the summary and
+# creates a DRAFT GitHub Release v<version>. Publishing the draft is the
+# manual approval gate — orch-deploy refuses to run on a draft release.
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch topo-deploy script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o topo-deploy.py
+
+      - name: Validate + plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+        run: |
+          python topo-deploy.py validate manifest.yml
+          python topo-deploy.py plan manifest.yml
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(grep -E '^version:' manifest.yml | cut -d' ' -f2 | tr -d '"')
+          gh release create "v$VER" --draft \
+            --title "Release $VER" \
+            --notes "Deploy manifest release $VER — publish to enable deploys." \
+            --repo "$GITHUB_REPOSITORY"
+          echo "draft release v$VER created — publish it to approve deploys"
