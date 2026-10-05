@@ -99,9 +99,11 @@ def main() -> None:
         gauges.append({"name": name, "unit": unit, "gauge": {"dataPoints": [point]}})
 
     csv_path = next(Path("dl").rglob("jacocoTestReport.csv"), None)
+
     if csv_path:
         with open(csv_path) as f:
             rows = list(csv.DictReader(f))
+            
         covered = sum(int(r["LINE_COVERED"]) for r in rows)
         missed = sum(int(r["LINE_MISSED"]) for r in rows)
         gauge("ci.coverage.percent", "%", covered / (covered + missed) * 100 if covered + missed else 0)
@@ -114,7 +116,7 @@ def main() -> None:
               sum(len(r.get("Vulnerabilities") or []) for r in results))
 
     semgrep_path = next(Path("dl").rglob("semgrep-results.json"), None)
-    
+
     if semgrep_path:
         gauge("ci.semgrep.findings", "1",
               len(json.loads(semgrep_path.read_text()).get("results", [])))
