@@ -12,8 +12,26 @@ permissions:
   actions: read
 
 jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\` (${{ github.sha }})"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+            if [ -f pom.xml ]; then echo "- Build: Maven"; else echo "- Build: Gradle"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   validate:
     name: Validate
+    needs: setup
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -30,6 +48,7 @@ jobs:
 
   ci:
     name: CI
+    needs: validate
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
@@ -37,7 +56,7 @@ jobs:
   # version bump being made (semver rules, incl. 0.x). Report stays in ci.yml.
   compat:
     name: Compat
-    needs: validate
+    needs: [validate, ci]
     permissions:
       contents: read
     runs-on: ubuntu-latest
