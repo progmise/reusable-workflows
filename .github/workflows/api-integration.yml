@@ -83,7 +83,7 @@ jobs:
           echo "envs=$envs" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy ${{ matrix.env }}
+    name: Deploy
     needs: [publish-image, deploy-envs]
     if: ${{ vars.VERCEL_PROJECT_ID != '' }}
     permissions:

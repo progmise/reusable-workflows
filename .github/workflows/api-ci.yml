@@ -88,13 +88,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Reuses the jar from Build artifact — no second Maven resolve.
-      - name: Download jar artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: target/
-
+      # The Dockerfile is self-contained (maven build → layertools → jre);
+      # no jar artifact needed here — it's only used by the SCA scan.
       - name: Docker build (local tag)
         id: image
         run: |
