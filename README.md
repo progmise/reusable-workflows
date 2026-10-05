@@ -40,7 +40,9 @@ Consumers only need their build files (`pom.xml`+`mvnw`, or Gradle equivalents) 
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.
 
 API consumers additionally need: `Dockerfile` (+ `Dockerfile.vercel` for
-Vercel deploys), secrets `DOCKER_USERNAME`/`DOCKER_TOKEN` (image publish) and
-`VERCEL_TOKEN`, and vars `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` +
-`DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default — add `"cert"`/`"pre"` to
-extend). Deploy jobs skip silently when the Vercel vars are unset.
+Vercel deploys), secret `DOCKER_TOKEN` (image publish) and optional secret
+`VERCEL_TOKEN`, and vars `DOCKER_USERNAME` (image namespace — public info,
+kept as var so image names aren't masked in logs), `VERCEL_ORG_ID`/
+`VERCEL_PROJECT_ID` + `DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default —
+add `"cert"`/`"pre"` to extend). Deploy jobs skip silently when the Vercel
+vars are unset.

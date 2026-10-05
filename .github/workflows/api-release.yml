@@ -71,7 +71,7 @@ jobs:
       - name: Docker Hub login
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
+          username: ${{ vars.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Publish image
@@ -80,7 +80,7 @@ jobs:
           REPO: ${{ github.event.repository.name }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          IMAGE="docker.io/${{ secrets.DOCKER_USERNAME }}/${REPO}"
+          IMAGE="docker.io/${{ vars.DOCKER_USERNAME }}/${REPO}"
           LOCAL="local/${REPO}:${SHA}"
           docker tag "$LOCAL" "${IMAGE}:${VERSION}"
           docker tag "$LOCAL" "${IMAGE}:latest"

@@ -46,7 +46,7 @@ jobs:
 
       - name: Validate version + image
         env:
-          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_USER: ${{ vars.DOCKER_USERNAME }}
           REPO: ${{ github.event.repository.name }}
           VERSION: ${{ inputs.version }}
         run: |
