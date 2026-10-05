@@ -27,6 +27,9 @@ jobs:
     secrets: inherit
 ```
 
+Also ships `AGENTS.md`, `LICENSE` (Apache 2.0) and `.agents/skills/`
+(`workflow-release`, `maintain-agents-doc`, `ponytail`).
+
 Consumers only need `gradle.properties` POM metadata + secrets
 (`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.

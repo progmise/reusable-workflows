@@ -107,12 +107,14 @@ def main() -> None:
         gauge("ci.coverage.percent", "%", covered / (covered + missed) * 100 if covered + missed else 0)
 
     trivy_path = next(Path("dl").rglob("trivy-results.json"), None)
+
     if trivy_path:
         results = json.loads(trivy_path.read_text()).get("Results") or []
         gauge("ci.trivy.findings", "1",
               sum(len(r.get("Vulnerabilities") or []) for r in results))
 
     semgrep_path = next(Path("dl").rglob("semgrep-results.json"), None)
+    
     if semgrep_path:
         gauge("ci.semgrep.findings", "1",
               len(json.loads(semgrep_path.read_text()).get("results", [])))
