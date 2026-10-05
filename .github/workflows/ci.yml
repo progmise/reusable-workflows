@@ -71,12 +71,18 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # Gradle needs a lockfile for Trivy; Maven repos are scanned via pom.xml.
-      - name: Generate dependency lockfile
+      # Gradle needs a lockfile for Trivy; Maven repos are scanned via pom.xml
+      # and Trivy resolves poms from the local ~/.m2 first — a warm repo avoids
+      # hitting Maven Central (429 rate limits observed).
+      - name: Generate dependency lockfile (Gradle)
         if: hashFiles('pom.xml') == ''
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/security.init.gradle.kts -o /tmp/security.init.gradle.kts
           ./gradlew dependencies --write-locks --no-daemon -I /tmp/security.init.gradle.kts
+
+      - name: Resolve dependencies (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests dependency:go-offline
 
       - name: Install Trivy
         run: |
