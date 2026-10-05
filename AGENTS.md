@@ -20,8 +20,12 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   signing + POM)
 - `scripts/` — Python 3 stdlib only (no pip installs):
   `emit-telemetry.py` (OTLP spans/gauges → Grafana Cloud),
-  `ci-summary.py` (run summary: tests, coverage, findings),
-  `junit-summary.py` (failed-tests section, called by ci-summary)
+  `ci-summary.py` (run summary: tests, coverage, findings, API compat),
+  `junit-summary.py` (failed-tests section, called by ci-summary),
+  `validate-release.py` (release version validation: semver, SNAPSHOT,
+  tag/published-exists, monotonic vs latest release),
+  `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
+  mode fails on semver-violating bumps — used by release.yml)
 
 ## Conventions
 

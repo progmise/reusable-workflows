@@ -92,19 +92,47 @@ def section_semgrep() -> list[str]:
 
         if len(results) > 20:
             lines.append(f"| … | and {len(results) - 20} more — see `semgrep-report` artifact | |")
-            
+
+    return lines
+
+
+def section_api_compat() -> list[str]:
+    path = first("japicmp.xml")
+
+    if not path:
+        return []
+
+    root = ET.parse(path).getroot()
+    old = Path(root.get("oldJar", "?")).name
+    new = Path(root.get("newJar", "?")).name
+    suggested = root.get("semanticVersioning", "?")
+    changes = [f"{cls.get('fullyQualifiedName')}: {c.text}"
+               for cls in root.iter("class") for c in cls.iter("compatibilityChange")]
+
+    lines = [f"### API compatibility — `{old}` → `{new}`",
+             f"- Suggested semver bump: **{suggested}** — "
+             f"{len(changes)} incompatible change(s)"]
+
+    if changes:
+        lines += ["| Change |", "|---|"]
+        lines += [f"| {c} |" for c in changes[:20]]
+
+        if len(changes) > 20:
+            lines.append(f"| … and {len(changes) - 20} more — see `compat-report` artifact |")
+
     return lines
 
 
 def main() -> None:
     results = json.loads(os.environ.get("JOB_RESULTS", "{}"))
     labels = {"build": "Build + Test", "trivy": "Trivy (SCA + secrets)",
-              "semgrep": "Semgrep (SAST)"}
+              "semgrep": "Semgrep (SAST)", "api-compat": "API compatibility"}
 
     lines = ["### CI Checks results", "| Job | Result |", "|---|---|"]
     lines += [f"| {labels.get(job, job)} | {info['result']} |"
               for job, info in results.items()]
-    lines += section_failed_tests() + section_coverage() + section_trivy() + section_semgrep()
+    lines += (section_failed_tests() + section_coverage() + section_trivy()
+              + section_semgrep() + section_api_compat())
 
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
         f.write("\n".join(lines) + "\n")

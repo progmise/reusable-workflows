@@ -97,6 +97,32 @@ jobs:
           path: trivy-results.json
           retention-days: 30
 
+  api-compat:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: API compatibility report
+        run: |
+          ./gradlew jar --no-daemon
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/api-compat.py \
+            -o api-compat.py && python3 api-compat.py
+
+      - name: Upload API compat report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compat-report
+          path: japicmp.xml
+          retention-days: 30
+
   semgrep:
     permissions:
       contents: read
@@ -124,7 +150,7 @@ jobs:
   summary:
     runs-on: ubuntu-latest
     if: always()
-    needs: [build, trivy, semgrep]
+    needs: [build, trivy, semgrep, api-compat]
     steps:
       - name: Download run reports
         uses: actions/download-artifact@v4
@@ -144,7 +170,7 @@ jobs:
   # gauges to Grafana Cloud; skips silently without GRAFANA_OTLP_* config.
   tracing:
     if: always()
-    needs: [build, trivy, semgrep]
+    needs: [build, trivy, semgrep, api-compat]
     uses: ./.github/workflows/telemetry.yml
     secrets: inherit
 

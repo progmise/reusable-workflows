@@ -8,9 +8,9 @@ lives here, versioned via the `v1` tag.
 
 | File | Purpose |
 |---|---|
-| `.github/workflows/ci.yml` | `workflow_call`: build+test (JaCoCo) ‖ Trivy ‖ Semgrep → summary → tracing |
+| `.github/workflows/ci.yml` | `workflow_call`: build+test (JaCoCo) ‖ Trivy ‖ Semgrep ‖ API compat (japicmp, report-only) → summary → tracing |
 | `.github/workflows/integration.yml` | `workflow_call`: ci + JitPack SHA report |
-| `.github/workflows/release.yml` | `workflow_call`: validate → ci → publish to Maven Central → tag + GH Release → tracing |
+| `.github/workflows/release.yml` | `workflow_call`: validate (semver + monotonic + not-published) → ci → compat gate → publish to Maven Central → tag + GH Release → tracing |
 | `.github/workflows/telemetry.yml` | `workflow_call`: shared OTLP tracing job (spans + gauges → Grafana Cloud) |
 | `scripts/*.py` | telemetry + run-summary emitters (Python stdlib, fetched via curl at `@v1`) |
 | `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl and applied with `gradle -I` |
