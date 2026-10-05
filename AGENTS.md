@@ -54,8 +54,8 @@ python -m py_compile scripts/emit-telemetry.py
 ## Branches
 
 Single `main`, no `development`. Small safe changes may go straight to `main`;
-otherwise use a short-lived branch `<type>/<kebab-description>` + PR —
-`feature/`, `fix/`, `chore/`, `docs/`, `refactor/`.
+otherwise use a short-lived branch `<type>/<snake_description>` + PR —
+`feature/`, `fix/`, `bug/`, `chore/`, `docs/`, `refactor/`.
 
 ## Release
 
