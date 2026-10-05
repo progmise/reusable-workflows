@@ -2,9 +2,9 @@ name: API Release
 
 # Reusable release for API repos — invoked by each API's thin release.yml
 # (workflow_dispatch on main). Validates the version, runs all CI checks,
-# publishes the image to Docker Hub (:version + :latest), creates tag + GH
-# Release and deploys (Vercel) to every env in vars.DEPLOY_ENVIRONMENTS
-# (default: ["pro"]). Deploy is skipped silently without VERCEL_TOKEN.
+# publishes the image to Docker Hub (:version + :latest) and creates the tag
+# + GitHub Release. Releases do NOT deploy — environment deploys run through
+# api-deploy.yml (manual dispatch per version+env) or the orchestrator.
 
 on:
   workflow_call:
@@ -52,6 +52,8 @@ jobs:
     needs: validate
     uses: ./.github/workflows/api-ci.yml
     secrets: inherit
+    with:
+      final-report: false
 
   publish-image:
     name: Publish Image
@@ -107,45 +109,13 @@ jobs:
           tag_name: ${{ needs.validate.outputs.version }}
           generate_release_notes: true
 
-  # Deploy matrix comes from the caller's DEPLOY_ENVIRONMENTS variable
-  # (JSON list, e.g. ["pro"] or ["cert","pre","pro"]). PRO-only by default.
-  deploy:
-    name: Deploy ${{ matrix.env }}
-    needs: [validate, release]
-    if: ${{ vars.VERCEL_PROJECT_ID != '' }}
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        env: ${{ fromJSON(vars.DEPLOY_ENVIRONMENTS || '["pro"]') }}
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.validate.outputs.version }}
-
-      - name: Deploy to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-          VERCEL_ENV: ${{ matrix.env }}
-        run: |
-          npm i -g vercel@44
-          PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
-          URL=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
-          {
-            echo "### Deploy ${{ matrix.env }}"
-            echo "$URL"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # Tracing + Summary close the pipeline (in that order).
+  # Tracing + Summary close the pipeline (in that order). The nested CI call
+  # suppresses its own (final-report: false) so they appear once.
   tracing:
     name: Tracing
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, validate, ci, publish-image, release, deploy]
+    needs: [setup, validate, ci, publish-image, release]
     permissions:
       actions: read
     env:
@@ -170,7 +140,7 @@ jobs:
     name: Summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, validate, ci, publish-image, release, deploy, tracing]
+    needs: [setup, validate, ci, publish-image, release, tracing]
     steps:
       - name: Download run reports
         uses: actions/download-artifact@v4

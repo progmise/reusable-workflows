@@ -4,9 +4,17 @@ name: API CI Checks
 # (pull_request) and by api-integration.yml / api-release.yml (workflow_call).
 # Same shape as the lib pipeline plus the container stages:
 #   Setup → Build artifact → Build image → SAST ‖ SCA ‖ CSA → Tracing → Summary
+# Callers that add their own Tracing/Summary at the end (integration, release)
+# pass final-report: false so these jobs don't show up twice in the run.
 
 on:
   workflow_call:
+    inputs:
+      final-report:
+        required: false
+        type: boolean
+        default: true
+        description: 'Emit Tracing + Summary jobs (false when the caller adds its own)'
 
 jobs:
   setup:
@@ -235,11 +243,12 @@ jobs:
           path: trivy-image-results.json
           retention-days: 30
 
-  # Tracing + Summary close the pipeline (in that order).
+  # Tracing + Summary close the pipeline (in that order). Suppressed when the
+  # caller passes final-report: false (it adds its own at the end).
   tracing:
     name: Tracing
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && inputs.final-report }}
     needs: [setup, build, build-image, sast, sca, csa]
     permissions:
       actions: read
@@ -264,7 +273,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && inputs.final-report }}
     needs: [setup, build, build-image, sast, sca, csa, tracing]
     steps:
       - name: Download run reports

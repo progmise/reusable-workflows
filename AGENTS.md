@@ -14,10 +14,12 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
   - libs: `ci.yml`, `integration.yml`, `release.yml`
-  - APIs: `api-ci.yml` (adds Build image + CSA vs lib ci), `api-integration.yml`
-    (+ Publish Image → Docker Hub), `api-release.yml` (+ Publish Image →
-    Docker Hub, Deploy → Vercel matrix `vars.DEPLOY_ENVIRONMENTS`),
-    `api-deploy.yml` (manual deploy of a tag)
+  - APIs: `api-ci.yml` (adds Build image + CSA vs lib ci; `inputs.final-report`
+    suppresses its Tracing/Summary when nested), `api-integration.yml`
+    (+ Publish Image → Docker Hub + Deploy to non-pro envs from
+    `vars.DEPLOY_ENVIRONMENTS`), `api-release.yml` (+ Publish Image +
+    tag/Release — **never deploys**), `api-deploy.yml` (manual deploy of a
+    tag to one env, validated against `DEPLOY_ENVIRONMENTS`)
   - tracing is an inline job in every workflow — a `uses:` nested call would
     show "tracing / tracing"; Tracing/Summary always run last, in that order
   - job display names are Title Case (`Setup`, `Build artifact`, `SAST`,

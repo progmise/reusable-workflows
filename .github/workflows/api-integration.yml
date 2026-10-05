@@ -2,9 +2,10 @@ name: API Integration
 
 # Reusable integration for API repos — invoked by each API's thin
 # integration.yml on merge to development/main. Publishes the image to Docker
-# Hub tagged with the merge SHA (and :edge on development / :latest on main).
-# Deploys are NOT automatic here — use the Deploy workflow (or Release) for
-# that.
+# Hub tagged with the merge SHA (and :edge on development / :latest on main),
+# then deploys to every NON-production environment in vars.DEPLOY_ENVIRONMENTS
+# (pro is excluded — production deploys go through api-deploy.yml / the
+# orchestrator, never on merge).
 
 on:
   workflow_call:
@@ -18,6 +19,8 @@ jobs:
     name: CI
     uses: ./.github/workflows/api-ci.yml
     secrets: inherit
+    with:
+      final-report: false
 
   publish-image:
     name: Publish Image
@@ -58,3 +61,97 @@ jobs:
             echo "\`${IMAGE}:${SHA}\`"
             echo "\`${IMAGE}:${CHANNEL}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Deploy matrix = DEPLOY_ENVIRONMENTS minus "pro". With the default
+  # ["pro"] the matrix is empty and the job is skipped — non-pro deploys on
+  # merge only happen once the caller lists e.g. ["cert","pre","pro"].
+  deploy-envs:
+    name: Deploy environments
+    needs: publish-image
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.envs.outputs.envs }}
+    steps:
+      - name: Non-pro environments
+        id: envs
+        env:
+          ALL: ${{ vars.DEPLOY_ENVIRONMENTS }}
+        run: |
+          envs=$(echo "${ALL:-[\"pro\"]}" | jq -c 'map(select(. != "pro"))')
+          echo "envs=$envs" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy ${{ matrix.env }}
+    needs: [publish-image, deploy-envs]
+    if: ${{ vars.VERCEL_PROJECT_ID != '' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: ${{ fromJSON(needs.deploy-envs.outputs.envs != '' && needs.deploy-envs.outputs.envs || '[]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ENV: ${{ matrix.env }}
+        run: |
+          npm i -g vercel@44
+          URL=$(vercel deploy --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
+          {
+            echo "### Deploy ${{ matrix.env }}"
+            echo "$URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Tracing + Summary close the pipeline (in that order). The nested CI call
+  # suppresses its own (final-report: false) so they appear once.
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [ci, publish-image, deploy-envs, deploy]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [ci, publish-image, deploy-envs, deploy, tracing]
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true

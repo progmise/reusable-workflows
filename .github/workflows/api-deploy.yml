@@ -2,8 +2,8 @@ name: API Deploy
 
 # Reusable deploy for API repos — invoked by each API's thin deploy.yml
 # (workflow_dispatch). Deploys an already-released version (git tag + image on
-# Docker Hub) to Vercel. Environments come from the caller's
-# DEPLOY_ENVIRONMENTS variable (JSON list, default ["pro"]).
+# Docker Hub) to a single Vercel environment. `environment` must be listed in
+# the caller's DEPLOY_ENVIRONMENTS variable (JSON list, default ["pro"]).
 
 on:
   workflow_call:
@@ -12,6 +12,11 @@ on:
         required: true
         type: string
         description: 'Version (git tag) to deploy, e.g. 0.2.0'
+      environment:
+        required: false
+        type: string
+        default: 'pro'
+        description: 'Target environment (must be in vars.DEPLOY_ENVIRONMENTS)'
 
 permissions:
   contents: read
@@ -31,7 +36,7 @@ jobs:
           {
             echo "### Setup"
             echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\`"
-            echo "- Deploy version: \`${{ inputs.version }}\`"
+            echo "- Deploy version: \`${{ inputs.version }}\` → \`${{ inputs.environment }}\`"
             echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -44,30 +49,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate version + image
+      - name: Validate environment + version + image
         env:
           DOCKER_USER: ${{ vars.DOCKER_USERNAME }}
           REPO: ${{ github.event.repository.name }}
           VERSION: ${{ inputs.version }}
+          ENV: ${{ inputs.environment }}
+          DEPLOY_ENVS: ${{ vars.DEPLOY_ENVIRONMENTS }}
         run: |
           set -e
+          echo "${DEPLOY_ENVS:-[\"pro\"]}" | jq -e --arg e "$ENV" 'index($e)' > /dev/null \
+            || { echo "::error::Environment '$ENV' not in DEPLOY_ENVIRONMENTS (${DEPLOY_ENVS:-[\"pro\"]})"; exit 1; }
           git ls-remote --exit-code --tags origin "$VERSION" > /dev/null \
             || { echo "::error::Tag $VERSION does not exist"; exit 1; }
           code=$(curl -sf -o /dev/null -w "%{http_code}" \
             "https://hub.docker.com/v2/repositories/${DOCKER_USER}/${REPO}/tags/${VERSION}/" || true)
           [ "$code" = "200" ] || echo "::warning::Image ${DOCKER_USER}/${REPO}:${VERSION} not found on Docker Hub (code $code)"
-          echo "Tag $VERSION OK"
+          echo "Env $ENV + tag $VERSION OK"
 
   deploy:
-    name: Deploy ${{ matrix.env }}
+    name: Deploy ${{ inputs.environment }}
     needs: validate
     if: ${{ vars.VERCEL_PROJECT_ID != '' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        env: ${{ fromJSON(vars.DEPLOY_ENVIRONMENTS || '["pro"]') }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -79,13 +85,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-          VERCEL_ENV: ${{ matrix.env }}
+          VERCEL_ENV: ${{ inputs.environment }}
         run: |
           npm i -g vercel@44
           PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
           URL=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
           {
-            echo "### Deploy ${{ matrix.env }} — ${{ inputs.version }}"
+            echo "### Deploy ${{ inputs.environment }} — ${{ inputs.version }}"
             echo "$URL"
           } >> "$GITHUB_STEP_SUMMARY"
 
