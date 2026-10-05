@@ -1,0 +1,104 @@
+name: Release
+
+# Reusable release — invoked by each lib's thin release.yml (workflow_dispatch
+# on main). Validates the version, runs all CI checks, publishes to Maven
+# Central and creates the tag + GH Release.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require main
+        run: |
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            echo "::error::The Release workflow must run on main" && exit 1
+          fi
+
+      - name: Validate version
+        id: version
+        run: |
+          v=$(grep -oP '^version\s*=\s*"\K[^"]+' build.gradle.kts)
+          if [ -z "$v" ]; then
+            echo "::error::Could not read version from build.gradle.kts" && exit 1
+          fi
+          if [[ "$v" == *SNAPSHOT* ]]; then
+            echo "::error::Cannot release a SNAPSHOT version: $v" && exit 1
+          fi
+          if git ls-remote --tags origin | grep -q "refs/tags/$v$"; then
+            echo "::error::Tag $v already exists — bump the version" && exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Releasing $v"
+
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    needs: [validate, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Publish to Maven Central
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_TOKEN }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew publishToMavenCentral --no-daemon -I .github/publish.init.gradle.kts
+
+  release:
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release (creates the tag)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
+
+  # Emits spans (real durations, via the Jobs API) + gauges to Grafana Cloud
+  # via OTLP/HTTP. Skips silently unless the GRAFANA_OTLP_ENDPOINT variable +
+  # GRAFANA_OTLP_AUTH secret are set.
+  tracing:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [validate, ci, publish, release]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.sh -o emit-telemetry.sh
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: bash emit-telemetry.sh

@@ -1,0 +1,27 @@
+name: Integration
+
+# Reusable integration checks — invoked by each lib's thin integration.yml on
+# merge to development/main. Same checks as a PR; the merged commit is
+# consumable via JitPack (com.github.<org>:<repo>:<commit-sha>).
+
+on:
+  workflow_call:
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  snapshot:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Snapshot availability
+        run: |
+          {
+            echo "### Development version"
+            echo "This commit is resolvable via JitPack:"
+            echo '```'
+            echo "com.github.${{ github.repository_owner }}:${{ github.event.repository.name }}:${{ github.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

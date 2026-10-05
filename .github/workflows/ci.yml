@@ -1,0 +1,165 @@
+name: CI Checks
+
+# Reusable CI checks — invoked by each lib's thin ci.yml (pull_request) and by
+# the reusable Integration/Release workflows (workflow_call).
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build
+        run: ./gradlew assemble --no-daemon
+
+      - name: Test (with JaCoCo)
+        run: ./gradlew test --no-daemon -I .github/ci.init.gradle.kts
+
+      - name: Coverage summary
+        run: |
+          awk -F',' 'NR>1 {lm+=$8; lc+=$9; bm+=$6; bc+=$7} END {
+            printf "### Coverage\n" >> ENVIRON["GITHUB_STEP_SUMMARY"]
+            printf "- Lines: **%.1f%%** (%d/%d)\n", lc/(lc+lm)*100, lc, lc+lm >> ENVIRON["GITHUB_STEP_SUMMARY"]
+            printf "- Branches: **%.1f%%** (%d/%d)\n", (bc+bm)? bc/(bc+bm)*100 : 100, bc, bc+bm >> ENVIRON["GITHUB_STEP_SUMMARY"]
+          }' build/reports/jacoco/test/jacocoTestReport.csv
+
+      - name: Upload test & coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/
+            build/reports/jacoco/
+          retention-days: 30
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Generate dependency lockfile
+        run: ./gradlew dependencies --write-locks --no-daemon -I .github/security.init.gradle.kts
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz | tar -xz trivy
+          sudo mv trivy /usr/local/bin/
+          trivy version
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'vuln,secret'
+          severity: 'CRITICAL,HIGH'
+          skip-setup-trivy: true
+          ignore-unfixed: true
+          exit-code: '1'
+          format: 'json'
+          output: 'trivy-results.json'
+
+      - name: Trivy findings
+        if: always()
+        run: |
+          test -f trivy-results.json && jq -r '.Results[]? | select(.Vulnerabilities) |
+            .Target as $t | .Vulnerabilities[] |
+            "\(.Severity)\t\(.VulnerabilityID)\t\(.PkgName) \(.InstalledVersion)\t(\($t))"' trivy-results.json || true
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-results.json
+          retention-days: 30
+
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep SAST
+        run: pipx run semgrep scan --config p/java --error --metrics=off --json --output semgrep-results.json
+
+      - name: Semgrep findings
+        if: always()
+        run: |
+          test -f semgrep-results.json && jq -r '.results[]? |
+            "\(.extra.severity)\t\(.check_id)\t\(.path):\(.start.line)"' semgrep-results.json || true
+
+      - name: Upload Semgrep report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-report
+          path: semgrep-results.json
+          retention-days: 30
+
+  summary:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build, trivy, semgrep]
+    steps:
+      - name: Workflow summary
+        run: |
+          {
+            echo "### CI Checks results"
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| Build + Test | ${{ needs.build.result }} |"
+            echo "| Trivy (SCA + secrets) | ${{ needs.trivy.result }} |"
+            echo "| Semgrep (SAST) | ${{ needs.semgrep.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Emits spans (real durations, via the Jobs API) + gauges (coverage,
+  # findings, job durations) to Grafana Cloud via OTLP/HTTP. Skips silently
+  # unless the GRAFANA_OTLP_ENDPOINT variable + GRAFANA_OTLP_AUTH secret are set.
+  tracing:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build, trivy, semgrep]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download run reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: '*-report*'
+          path: dl
+
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.sh -o emit-telemetry.sh
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: bash emit-telemetry.sh
+
+# ---------------------------------------------------------------------------
+# Not ported from the reference pipeline (see README "Not ported"):
+# - Threat Modeling validation: enterprise-internal tool, no free equivalent.
+# - SCQA: SonarCloud is free for public repos only — could be enabled later.
+# - CodeQL: free for public repos only (this repo may be private).
+# - Required status checks on protected branches: pending first CI run to pin
+#   the exact check names.
+# - Commit/ticket validation: commitlint (conventional commits) is free if a
+#   commit convention is adopted.
+# ---------------------------------------------------------------------------
