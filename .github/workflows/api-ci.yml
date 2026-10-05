@@ -130,6 +130,11 @@ jobs:
           path: semgrep-results.json
           retention-days: 30
 
+  # SCA scans the built jar (app-jar artifact), not the source tree: Trivy
+  # resolves pom.xml parent/transitive POMs against Maven Central on `trivy fs .`
+  # and anonymous GitHub-hosted runners hit 429 rate limits. Scanning the fat
+  # jar's BOOT-INF/lib entries needs no remote resolution. Secrets are still
+  # scanned on the source tree (local, no Maven calls).
   sca:
     name: SCA
     needs: build-image
@@ -139,24 +144,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Download jar artifact
+        uses: actions/download-artifact@v4
         with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Resolve dependencies (Maven)
-        run: ./mvnw -B -ntp -DskipTests dependency:go-offline
+          name: app-jar
+          path: scan-target/
 
       - name: Install Trivy
         run: |
           curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz | tar -xz trivy
           sudo mv trivy /usr/local/bin/
 
-      - name: Trivy vulnerability scan
+      - name: Trivy vulnerability scan (jar)
         run: |
           for attempt in 1 2 3; do
-            trivy fs --scanners vuln,secret --severity CRITICAL,HIGH \
-              --ignore-unfixed --format json --output trivy-results.json . && break
+            trivy fs --scanners vuln --severity CRITICAL,HIGH \
+              --ignore-unfixed --format json --output trivy-results.json scan-target/ && break
             code=$?
             [ "$attempt" -eq 3 ] && exit "$code"
             sleep $((attempt * 60))
@@ -164,6 +167,12 @@ jobs:
           test -f trivy-results.json || exit 1
           count=$(jq '[.Results[]?.Vulnerabilities // empty | length] | add // 0' trivy-results.json)
           [ "$count" -eq 0 ] || exit 1
+
+      - name: Trivy secret scan (source)
+        run: |
+          trivy fs --scanners secret --format json --output trivy-secrets.json . || true
+          jq -r '.Results[]? | select(.Secrets) | .Target as $t | .Secrets[] |
+            "SECRET\t\(.RuleID)\t\($t):\(.StartLine)"' trivy-secrets.json || true
 
       - name: Trivy findings
         if: always()
@@ -177,7 +186,9 @@ jobs:
         if: always()
         with:
           name: trivy-report
-          path: trivy-results.json
+          path: |
+            trivy-results.json
+            trivy-secrets.json
           retention-days: 30
 
   # CSA = container image scan of the artifact built by Build image.
