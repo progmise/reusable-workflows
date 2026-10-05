@@ -10,7 +10,7 @@ on:
   workflow_call:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -48,16 +48,13 @@ jobs:
         run: |
           IMAGE="docker.io/${{ secrets.DOCKER_USERNAME }}/${REPO}"
           LOCAL="local/${REPO}:${SHA}"
+          CHANNEL="edge"; [ "$REF_NAME" = "main" ] && CHANNEL="latest"
           docker tag "$LOCAL" "${IMAGE}:${SHA}"
-          if [ "$REF_NAME" = "main" ]; then
-            docker tag "$LOCAL" "${IMAGE}:latest"
-          else
-            docker tag "$LOCAL" "${IMAGE}:edge"
-          fi
+          docker tag "$LOCAL" "${IMAGE}:${CHANNEL}"
           docker push "${IMAGE}:${SHA}"
-          docker push "${IMAGE}:latest" 2>/dev/null || docker push "${IMAGE}:edge" 2>/dev/null || true
+          docker push "${IMAGE}:${CHANNEL}"
           {
             echo "### Published image"
             echo "\`${IMAGE}:${SHA}\`"
-            [ "$REF_NAME" = "main" ] && echo "\`${IMAGE}:latest\`" || echo "\`${IMAGE}:edge\`"
+            echo "\`${IMAGE}:${CHANNEL}\`"
           } >> "$GITHUB_STEP_SUMMARY"

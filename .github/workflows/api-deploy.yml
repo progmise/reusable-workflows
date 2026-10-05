@@ -81,7 +81,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_ENV: ${{ matrix.env }}
         run: |
-          npm i -g vercel@latest
+          npm i -g vercel@44
           PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
           URL=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
           {
