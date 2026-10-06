@@ -14,6 +14,7 @@ Central checks (APIs publish Docker images, not Maven artifacts).
 
 Env: GITHUB_REF_NAME (must be main), GITHUB_OUTPUT. Stdlib only."""
 
+import json
 import os
 import re
 import subprocess
