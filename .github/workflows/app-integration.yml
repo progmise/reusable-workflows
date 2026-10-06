@@ -25,6 +25,7 @@ jobs:
   publish-image:
     name: Publish Image
     needs: ci
+    if: vars.DOCKER_USERNAME != ''
     permissions:
       contents: read
     runs-on: ubuntu-latest
