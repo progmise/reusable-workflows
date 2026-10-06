@@ -14,8 +14,10 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
   - libs: `ci.yml`, `integration.yml`, `release.yml`
-  - apps (APIs, SPAs, CLIs — anything dockerized): `app-ci.yml` (adds Build image + CSA vs lib ci; `inputs.final-report`
-    suppresses its Tracing/Summary when nested), `app-integration.yml`
+  - libs `ci.yml` and apps `app-ci.yml` both take `inputs.final-report`
+    (default true) — nested callers (`release.yml` for libs, `app-integration`/
+    `app-release` for apps) pass `false` so Tracing/Summary don't duplicate
+  - apps (APIs, SPAs, CLIs — anything dockerized): `app-ci.yml` (adds Build image + CSA vs lib ci), `app-integration.yml`
     (+ Publish Image → Docker Hub + Deploy to non-pro envs from
     `vars.DEPLOY_ENVIRONMENTS`), `app-release.yml` (+ Publish Image +
     tag/Release — **never deploys**), `app-deploy.yml` (manual deploy of a

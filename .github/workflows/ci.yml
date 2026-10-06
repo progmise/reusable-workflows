@@ -5,6 +5,13 @@ name: CI Checks
 
 on:
   workflow_call:
+    inputs:
+      # Callers that nest this workflow (release.yml) run their own
+      # Tracing/Summary at the end — pass final-report: false so these jobs
+      # don't show up twice in the run.
+      final-report:
+        type: boolean
+        default: true
 
 jobs:
   setup:
@@ -211,7 +218,7 @@ jobs:
   tracing:
     name: Tracing
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && inputs.final-report }}
     needs: [build, trivy, semgrep, api-compat]
     permissions:
       actions: read
@@ -236,7 +243,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && inputs.final-report }}
     needs: [build, trivy, semgrep, api-compat, tracing]
     steps:
       - name: Download run reports
