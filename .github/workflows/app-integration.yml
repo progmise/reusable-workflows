@@ -105,7 +105,10 @@ jobs:
           VERCEL_ENV: ${{ matrix.env }}
         run: |
           npm i -g vercel@44
-          URL=$(vercel deploy --yes --token "$VERCEL_TOKEN" 2>&1 | tail -1)
+          set -o pipefail
+          OUT=$(vercel deploy --yes --token "$VERCEL_TOKEN" 2>&1 | tail -20)
+          echo "$OUT"
+          URL=$(echo "$OUT" | tail -1)
           {
             echo "### Deploy ${{ matrix.env }}"
             echo "$URL"
