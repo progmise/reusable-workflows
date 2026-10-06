@@ -151,11 +151,17 @@ def gh(*args, check=True):
 
 
 def latest_run(repo, since):
-    """Newest workflow_dispatch run of deploy.yml created after `since`."""
-    r = gh("api", f"repos/{repo}/actions/workflows/deploy.yml/runs",
-           "-f", "event=workflow_dispatch", "-f", "per_page=5")
-    for run in json.loads(r.stdout).get("workflow_runs", []):
-        if run["created_at"] >= since:
+    """Newest workflow_dispatch run of deploy.yml created after `since`.
+
+    Uses `gh run list` rather than `gh api` — same auth path as
+    `gh workflow run` (a PAT that can dispatch can also list).
+    """
+    r = gh("run", "list", "-R", repo, "--workflow", "deploy.yml",
+           "--event", "workflow_dispatch", "--limit", "5",
+           "--json", "databaseId,status,conclusion,createdAt,url")
+    for run in json.loads(r.stdout):
+        if run["createdAt"] >= since:
+            run["html_url"] = run["url"]
             return run
     return None
 
