@@ -89,9 +89,12 @@ jobs:
         run: |
           npm i -g vercel@44
           PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
-          set -o pipefail
-          OUT=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1 | tail -20)
-          echo "$OUT"
+          set +e
+          OUT=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1)
+          RC=$?
+          set -e
+          echo "$OUT" | tail -25
+          [ $RC -ne 0 ] && exit $RC
           URL=$(echo "$OUT" | tail -1)
           {
             echo "### Deploy ${{ inputs.environment }} — ${{ inputs.version }}"
