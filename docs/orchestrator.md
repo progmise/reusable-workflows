@@ -70,7 +70,7 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 | Topo-sort + deploy por niveles | `scripts/topo-deploy.py` + `orch-deploy.yml` |
 | deploy-orchestrator + polling | `gh workflow run api-deploy.yml` por repo + poll de conclusión |
 | Notify Deployment | Step summary (+ webhook opcional a futuro) |
-| Gluon front | **no construir** — GitHub UI alcanza hoy |
+| Gluon front | `deploy-dashboard` — SPA React/Vite en GitHub Pages |
 
 ### `deploy-manifest` repo (nuevo)
 
@@ -114,9 +114,9 @@ components:
   `DEPLOY_ENVIRONMENTS`).
 - Reusar `api-deploy.yml` existente — ya valida tag + imagen en registry y
   despliega a Vercel por `version`.
-- Si más adelante hace falta front: una GitHub Page estática que lea
-  `manifest.yml` + la Actions API sería suficiente — evaluar solo si el
-  número de apps crece.
+- Front: `progmise/deploy-dashboard` — SPA React/Vite en GitHub Pages
+  que lee `manifest.yml` + Actions API (read-only; PAT opcional en
+  localStorage para subir el rate limit).
 
 ## Pendiente al retomar
 
