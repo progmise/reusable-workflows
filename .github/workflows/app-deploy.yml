@@ -87,7 +87,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_ENV: ${{ inputs.environment }}
         run: |
-          npm i -g vercel@44
+          npm i -g vercel@47
           PROD_FLAG=""; [ "$VERCEL_ENV" = "pro" ] && PROD_FLAG="--prod"
           set +e
           OUT=$(vercel deploy $PROD_FLAG --yes --token "$VERCEL_TOKEN" 2>&1)

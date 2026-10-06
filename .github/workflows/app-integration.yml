@@ -104,7 +104,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_ENV: ${{ matrix.env }}
         run: |
-          npm i -g vercel@44
+          npm i -g vercel@47
           set +e
           OUT=$(vercel deploy --yes --token "$VERCEL_TOKEN" 2>&1)
           RC=$?
