@@ -47,7 +47,7 @@ jobs:
           echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy ${{ needs.setup.outputs.environment }}
+    name: Deployment Orchestration
     needs: setup
     runs-on: ubuntu-latest
     steps:

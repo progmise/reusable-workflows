@@ -171,7 +171,7 @@ Publishing the draft is the approval gate — `orch-deploy` refuses drafts.
 
 ```mermaid
 flowchart TD
-    S[Setup] --> D["Deploy {env}"]
+    S[Setup] --> D["Deployment Orchestration"]
     D --> T[Tracing]
     T --> SUM[Summary]
     subgraph D2[" "]
