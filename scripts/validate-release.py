@@ -9,7 +9,7 @@ Checks, in order:
   5. version strictly greater than the latest tag AND the latest
      published version (monotonic)
 
-Usage: validate-release.py [--kind lib|api] — `--kind api` skips the Maven
+Usage: validate-release.py [--kind lib|app] — `--kind app` (alias: api) skips the Maven
 Central checks (APIs publish Docker images, not Maven artifacts).
 
 Env: GITHUB_REF_NAME (must be main), GITHUB_OUTPUT. Stdlib only."""
@@ -48,6 +48,9 @@ def read_version() -> str:
     if root is not None:
         return pom_text(root, "version")
 
+    if os.path.exists("package.json"):
+        return json.load(open("package.json")).get("version", "")
+
     m = re.search(r'^version\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
 
@@ -60,6 +63,9 @@ def read_group() -> str:
     if root is not None:
         return pom_text(root, "groupId")
 
+    if not os.path.exists("build.gradle.kts"):
+        return ""
+
     m = re.search(r'^group\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
 
@@ -71,6 +77,9 @@ def read_artifact() -> str:
 
     if root is not None:
         return pom_text(root, "artifactId")
+
+    if not os.path.exists("gradle.properties"):
+        return ""
 
     for line in open("gradle.properties"):
         if line.startswith("POM_ARTIFACT_ID="):
@@ -102,6 +111,7 @@ def central_versions(group: str, artifact: str) -> list[str]:
 
 def main() -> None:
     kind = sys.argv[sys.argv.index("--kind") + 1] if "--kind" in sys.argv else "lib"
+    kind = "app" if kind == "api" else kind  # legacy alias
 
     if os.environ.get("GITHUB_REF_NAME") != "main":
         fail("The Release workflow must run on main")
@@ -109,7 +119,7 @@ def main() -> None:
     version = read_version()
 
     if not version:
-        fail("Could not read version from build.gradle.kts / pom.xml")
+        fail("Could not read version from pom.xml / build.gradle.kts / package.json")
 
     if not SEMVER.match(version):
         fail(f"Not a semver X.Y.Z version: {version}")

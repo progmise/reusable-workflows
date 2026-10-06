@@ -1,10 +1,10 @@
-name: API Release
+name: App Release
 
 # Reusable release for API repos — invoked by each API's thin release.yml
 # (workflow_dispatch on main). Validates the version, runs all CI checks,
 # publishes the image to Docker Hub (:version + :latest) and creates the tag
 # + GitHub Release. Releases do NOT deploy — environment deploys run through
-# api-deploy.yml (manual dispatch per version+env) or the orchestrator.
+# app-deploy.yml (manual dispatch per version+env) or the orchestrator.
 
 on:
   workflow_call:
@@ -45,12 +45,12 @@ jobs:
         id: version
         run: |
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/validate-release.py \
-            -o validate-release.py && python3 validate-release.py --kind api
+            -o validate-release.py && python3 validate-release.py --kind app
 
   ci:
     name: CI
     needs: validate
-    uses: ./.github/workflows/api-ci.yml
+    uses: ./.github/workflows/app-ci.yml
     secrets: inherit
     with:
       final-report: false

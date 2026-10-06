@@ -1,10 +1,10 @@
-name: API Integration
+name: App Integration
 
 # Reusable integration for API repos — invoked by each API's thin
 # integration.yml on merge to development/main. Publishes the image to Docker
 # Hub tagged with the merge SHA (and :edge on development / :latest on main),
 # then deploys to every NON-production environment in vars.DEPLOY_ENVIRONMENTS
-# (pro is excluded — production deploys go through api-deploy.yml / the
+# (pro is excluded — production deploys go through app-deploy.yml / the
 # orchestrator, never on merge).
 
 on:
@@ -17,7 +17,7 @@ permissions:
 jobs:
   ci:
     name: CI
-    uses: ./.github/workflows/api-ci.yml
+    uses: ./.github/workflows/app-ci.yml
     secrets: inherit
     with:
       final-report: false

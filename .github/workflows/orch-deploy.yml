@@ -3,7 +3,7 @@ name: Orchestrator Deploy
 # Reusable — called by the deploy-manifest repo via workflow_dispatch.
 # Deploys a published manifest release: checks out manifest.yml at the
 # release tag, topo-sorts components and dispatches each repo's deploy.yml
-# (api-deploy) level by level, polling each run to conclusion.
+# (app-deploy) level by level, polling each run to conclusion.
 on:
   workflow_call:
     inputs:

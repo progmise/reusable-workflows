@@ -68,7 +68,7 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 | `oam-application-definition.yml` | repo `deploy-manifest` con `manifest.yml` |
 | Validación de versión/release | `scripts/` + job Validate en `orch-ci.yml` |
 | Topo-sort + deploy por niveles | `scripts/topo-deploy.py` + `orch-deploy.yml` |
-| deploy-orchestrator + polling | `gh workflow run api-deploy.yml` por repo + poll de conclusión |
+| deploy-orchestrator + polling | `gh workflow run app-deploy.yml` por repo + poll de conclusión |
 | Notify Deployment | Step summary (+ webhook opcional a futuro) |
 | Gluon front | `deploy-dashboard` — SPA React/Vite en GitHub Pages |
 
@@ -97,7 +97,7 @@ components:
   GitHub Release del manifiesto con la versión.
 - `orch-deploy.yml` (dispatch `{version, env}`): checkout manifest@version →
   `topo-deploy.py` produce niveles → por nivel, matrix despacha
-  `api-deploy.yml` en cada repo (`gh workflow run` con PAT/token) → poll hasta
+  `app-deploy.yml` en cada repo (`gh workflow run` con PAT/token) → poll hasta
   conclusión → Summary con diagrama + resultados.
 - Callers thin en `deploy-manifest/.github/workflows/`.
 
@@ -112,7 +112,7 @@ components:
   manifiesto (draft→published) es el gate; `environment` es input del
   dispatch (`pro` por defecto, extensible a `cert`/`pre` igual que
   `DEPLOY_ENVIRONMENTS`).
-- Reusar `api-deploy.yml` existente — ya valida tag + imagen en registry y
+- Reusar `app-deploy.yml` existente — ya valida tag + imagen en registry y
   despliega a Vercel por `version`.
 - Front: `progmise/deploy-dashboard` — SPA React/Vite en GitHub Pages
   que lee `manifest.yml` + Actions API (read-only; PAT opcional en
@@ -126,4 +126,4 @@ components:
    `strategy.matrix`).
 3. Los 3 workflows + callers + `v1`.
 4. Decidir si `amortization-api` migra de sus workflows actuales a los
-   callers `api-*` (requiere variante Gradle en `api-ci`/`build`).
+   callers `app-*` (requiere variante Gradle en `app-ci`/`build`).

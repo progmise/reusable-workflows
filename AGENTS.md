@@ -14,11 +14,11 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
   - libs: `ci.yml`, `integration.yml`, `release.yml`
-  - APIs: `api-ci.yml` (adds Build image + CSA vs lib ci; `inputs.final-report`
-    suppresses its Tracing/Summary when nested), `api-integration.yml`
+  - apps (APIs, SPAs, CLIs — anything dockerized): `app-ci.yml` (adds Build image + CSA vs lib ci; `inputs.final-report`
+    suppresses its Tracing/Summary when nested), `app-integration.yml`
     (+ Publish Image → Docker Hub + Deploy to non-pro envs from
-    `vars.DEPLOY_ENVIRONMENTS`), `api-release.yml` (+ Publish Image +
-    tag/Release — **never deploys**), `api-deploy.yml` (manual deploy of a
+    `vars.DEPLOY_ENVIRONMENTS`), `app-release.yml` (+ Publish Image +
+    tag/Release — **never deploys**), `app-deploy.yml` (manual deploy of a
     tag to one env, validated against `DEPLOY_ENVIRONMENTS`)
   - orchestrator: `orch-ci.yml`/`orch-release.yml`/`orch-deploy.yml` — called
     only by `deploy-manifest` (manifest validation → draft release →
@@ -69,7 +69,7 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   changing a fetched file, move `v1` to the new commit.
 - **Empty matrix jobs fail the run**: a `matrix` that expands to `[]` marks
   the job failed (it doesn't even appear in the job list). Guard matrix jobs
-  with a job-level `if:` on the setup output (see `api-integration` deploy).
+  with a job-level `if:` on the setup output (see `app-integration` deploy).
 
 ## Verify before done
 

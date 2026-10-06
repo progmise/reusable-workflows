@@ -1,4 +1,4 @@
-name: API Deploy
+name: App Deploy
 
 # Reusable deploy for API repos — invoked by each API's thin deploy.yml
 # (workflow_dispatch). Deploys an already-released version (git tag + image on

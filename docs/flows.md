@@ -7,7 +7,7 @@ in the Actions UI. Consumers only hold thin callers; all logic lives here.
 
 ```mermaid
 flowchart LR
-    subgraph API["API repos (loans-api, generated APIs)"]
+    subgraph API["API repos (loans-api, generated deployable services)"]
         A_PR["PR → development/main<br/><code>ci.yml</code> caller"]
         A_PUSH["merge → development/main<br/><code>integration.yml</code> caller"]
         A_REL["dispatch<br/><code>release.yml</code> caller"]
@@ -19,10 +19,10 @@ flowchart LR
         L_REL["dispatch<br/><code>release.yml</code> caller"]
     end
     subgraph RW["reusable-workflows @v1"]
-        RW_ACI[api-ci.yml]
-        RW_AIN[api-integration.yml]
-        RW_ARE[api-release.yml]
-        RW_ADE[api-deploy.yml]
+        RW_ACI[app-ci.yml]
+        RW_AIN[app-integration.yml]
+        RW_ARE[app-release.yml]
+        RW_ADE[app-deploy.yml]
         RW_CI[ci.yml]
         RW_IN[integration.yml]
         RW_RE[release.yml]
@@ -50,9 +50,9 @@ flowchart LR
 
 ---
 
-## API pipelines
+## App pipelines (APIs, SPAs, CLIs)
 
-### `api-ci.yml` — PR checks
+### `app-ci.yml` — PR checks
 
 ```mermaid
 flowchart TD
@@ -81,11 +81,11 @@ flowchart TD
 Nested callers can pass `final-report: false` → Tracing/Summary are skipped
 inside the call and run once at the outer workflow level.
 
-### `api-integration.yml` — merge to `development`/`main`
+### `app-integration.yml` — merge to `development`/`main`
 
 ```mermaid
 flowchart TD
-    subgraph CI["CI (api-ci, final-report: false)"]
+    subgraph CI["CI (app-ci, final-report: false)"]
         C1[Setup → Build artifact → Build image → SAST ‖ SCA ‖ CSA]
     end
     CI --> P[Publish Image]
@@ -106,12 +106,12 @@ flowchart TD
   on merge).
 - Skipped when `VERCEL_PROJECT_ID` is not set.
 
-### `api-release.yml` — manual dispatch
+### `app-release.yml` — manual dispatch
 
 ```mermaid
 flowchart TD
     S[Setup] --> V[Validate]
-    V --> CI["CI (api-ci, final-report: false)"]
+    V --> CI["CI (app-ci, final-report: false)"]
     V --> P[Publish Image]
     CI --> P
     P --> R[Release]
@@ -128,10 +128,10 @@ flowchart TD
   latest release (`validate-release.py --kind api` — no Maven Central check).
 - **Publish Image** pushes `:<version>` + `:latest`.
 - **Release** creates the git tag + GitHub Release.
-- **Never deploys** — production goes through `api-deploy.yml` (or the
+- **Never deploys** — production goes through `app-deploy.yml` (or the
   orchestrator) so it stays an explicit, auditable action.
 
-### `api-deploy.yml` — manual dispatch (deploy a released version)
+### `app-deploy.yml` — manual dispatch (deploy a released version)
 
 ```mermaid
 flowchart TD
@@ -246,7 +246,7 @@ Validate (semver/tag exists/published check) → CI + Compat gate (japicmp
   defaults.
 - **Tracing/Summary always run** (`if: always()`) so failures still emit
   spans and recap. Nested CI calls suppress their own via `final-report`.
-- **Empty matrix = failure** on GitHub — that's why `api-integration`
-  guards `deploy` with `envs != '[]'` and `api-deploy` takes a single env.
+- **Empty matrix = failure** on GitHub — that's why `app-integration`
+  guards `deploy` with `envs != '[]'` and `app-deploy` takes a single env.
 - Secrets never reach logs; `GRAFANA_OTLP_AUTH` only goes into the OTLP
   `Authorization` header.
