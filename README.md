@@ -44,9 +44,9 @@ Consumers only need their build files (`pom.xml`+`mvnw`, or Gradle equivalents) 
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.
 
 App consumers additionally need: a self-contained `Dockerfile` at the repo
-root (multi-stage source build — the same file serves `docker build` and
-compose; for Vercel container deploys ship `Dockerfile.vercel` alongside and
-set the project's Framework Preset to `Container`), and optionally:
+root (multi-stage source build — the same file serves `docker build`,
+compose, and Vercel; set the project's Framework Preset to `Container`),
+and optionally:
 secret `DOCKER_TOKEN` + var `DOCKER_USERNAME` (image namespace — public info,
 kept as var so image names aren't masked in logs) for Publish Image —
 **skipped entirely when unset**, so templates run CI green with zero

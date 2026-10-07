@@ -117,7 +117,8 @@ components:
 - Front: `progmise/deploy-dashboard` — SPA React/Vite + backend Express.
   Login con GitHub OAuth (client_secret server-side, token del usuario en
   cookie HttpOnly), proxy `/api/gh/*` a la Actions API con ese token. Deploya
-  como container en Vercel (preset `Container` + `Dockerfile.vercel`) vía el
+  como container en Vercel (preset `Container`; buildea el `Dockerfile`
+  raíz) vía el
   mismo pipeline `app-*`.
 
 ## Pendiente al retomar
