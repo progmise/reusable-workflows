@@ -15,12 +15,11 @@ Manifest shape (strict):
   environments:                    # optional — declared deploy targets
     - name: pro
       type: production
-  infrastructures:                 # optional — infra per environment
-    - id: loans-api-pro
-      type: vercel                 # vercel | artifact-store | kubernetes | ...
-      env: pro
-      project: loans-api
-      credentialsId: VERCEL_TOKEN  # name of the GitHub secret in the consumer
+      infrastructures:             # infra targets under this env
+        - id: loans-api-pro
+          type: vercel             # vercel | artifact-store | kubernetes | ...
+          project: loans-api       # free-form provider fields
+          credentialsId: VERCEL_TOKEN  # name of the secret in the consumer
   components:
     - name: loans-api
       repo: progmise/loans-api
@@ -37,33 +36,63 @@ import time
 import urllib.request
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-SECTIONS = ("components", "environments", "infrastructures")
+SECTIONS = ("components", "environments")
 LIST_FIELDS = {"needs", "infra"}
 
 
 def parse(path):
-    """Strict stdlib parser for the manifest schema above."""
+    """Strict stdlib parser for the manifest schema above.
+
+    Indentation contract: top-level keys at column 0, section items at
+    `  - `, item fields at `    `, and inside an environment item an
+    `infrastructures:` list whose entries sit at `      - ` with fields
+    at `        `.
+    """
     manifest = {s: [] for s in SECTIONS}
     section = None
-    current = None
+    current = None      # open item of the current section
+    sub = None          # open infrastructures[] item
+    in_sub = False      # inside an environment's infrastructures: list
+
+    def flush_sub():
+        nonlocal sub, in_sub
+        if sub is not None:
+            current["infrastructures"].append(sub)
+            sub = None
+        in_sub = False
+
+    def flush_item():
+        nonlocal current
+        flush_sub()
+        if current is not None:
+            manifest[section].append(current)
+            current = None
+
     for n, raw in enumerate(open(path, encoding="utf-8"), 1):
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
         key_val = re.match(r"^(\w[\w-]*):\s*(.*)$", line.strip())
         if not line.startswith(" "):
-            if current is not None:
-                manifest[section].append(current)
-                current = None
+            flush_item()
             if line.startswith("version:"):
                 manifest["version"] = line.split(":", 1)[1].strip().strip('"')
             elif key_val and key_val.group(1) in SECTIONS:
                 section = key_val.group(1)
             else:
                 fail(f"line {n}: unexpected content: {raw.rstrip()}")
+        elif line.startswith("      - ") and in_sub and current is not None:
+            if sub is not None:
+                current["infrastructures"].append(sub)
+            sub = {}
+            m = re.match(r"^      - (\w[\w-]*):\s*(.*)$", line)
+            if not m:
+                fail(f"line {n}: bad infrastructure entry: {raw.rstrip()}")
+            sub[m.group(1)] = m.group(2).strip().strip('"')
+        elif line.startswith("        ") and sub is not None and key_val:
+            sub[key_val.group(1)] = key_val.group(2).strip().strip('"')
         elif line.startswith("  - ") and section:
-            if current is not None:
-                manifest[section].append(current)
+            flush_item()
             current = {}
             m = re.match(r"^  - (\w[\w-]*):\s*(.*)$", line)
             if not m:
@@ -71,15 +100,19 @@ def parse(path):
             current[m.group(1)] = m.group(2).strip().strip('"')
         elif line.startswith("    ") and current is not None and key_val:
             k, v = key_val.group(1), key_val.group(2).strip()
-            if k in LIST_FIELDS:
-                current[k] = [x.strip().strip('"') for x in
-                              v.strip("[]").split(",") if x.strip()]
+            if k == "infrastructures" and not v and section == "environments":
+                current.setdefault("infrastructures", [])
+                in_sub = True
             else:
-                current[k] = v.strip('"')
+                flush_sub()
+                if k in LIST_FIELDS:
+                    current[k] = [x.strip().strip('"') for x in
+                                  v.strip("[]").split(",") if x.strip()]
+                else:
+                    current[k] = v.strip('"')
         else:
             fail(f"line {n}: unexpected content: {raw.rstrip()}")
-    if current is not None and section:
-        manifest[section].append(current)
+    flush_item()
     return manifest
 
 
@@ -144,22 +177,20 @@ def validate(manifest):
     env_names = [e.get("name", "") for e in manifest["environments"]]
     if len(env_names) != len(set(env_names)):
         errors.append("duplicate environment names")
+    infra_ids = []
     for e in manifest["environments"]:
         for field in ("name", "type"):
             if not e.get(field):
                 errors.append(f"environment {e.get('name', '?')}: "
                               f"missing '{field}'")
-    infra_ids = [i.get("id", "") for i in manifest["infrastructures"]]
+        for i in e.get("infrastructures", []):
+            infra_ids.append(i.get("id", ""))
+            for field in ("id", "type"):
+                if not i.get(field):
+                    errors.append(f"infrastructure in env "
+                                  f"'{e.get('name', '?')}': missing '{field}'")
     if len(infra_ids) != len(set(infra_ids)):
         errors.append("duplicate infrastructure ids")
-    for i in manifest["infrastructures"]:
-        for field in ("id", "type", "env"):
-            if not i.get(field):
-                errors.append(f"infrastructure {i.get('id', '?')}: "
-                              f"missing '{field}'")
-        if i.get("env") and env_names and i["env"] not in env_names:
-            errors.append(f"infrastructure {i['id']}: unknown env "
-                          f"'{i['env']}'")
     token = os.environ.get("GH_TOKEN")
     for c in manifest["components"]:
         for field in ("name", "repo", "tag"):
@@ -212,7 +243,8 @@ def deploy(manifest, env):
     envs = manifest["environments"]
     if envs and env not in {e.get("name") for e in envs}:
         fail(f"environment '{env}' not declared in manifest environments")
-    infra_by_id = {i.get("id"): i for i in manifest["infrastructures"]}
+    infra_by_id = {i.get("id"): (e.get("name"), i)
+                   for e in envs for i in e.get("infrastructures", [])}
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     results = {}
     for i, level in enumerate(topo_levels(manifest["components"]), 1):
@@ -220,7 +252,7 @@ def deploy(manifest, env):
         for c in level:
             bound = c.get("infra") or []
             targets = [x for x in bound
-                       if infra_by_id.get(x, {}).get("env") == env]
+                       if infra_by_id.get(x, (None,))[0] == env]
             if bound and not targets:
                 return results, False, (f"{c['name']}: no infrastructure "
                                         f"binding for env '{env}'")

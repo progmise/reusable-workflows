@@ -45,8 +45,8 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
   mode fails on semver-violating bumps — used by release.yml),
   `topo-deploy.py` (`validate`/`plan`/`deploy` for `deploy-manifest` — strict
-  stdlib parser for `manifest.yml`: `version` + `environments` +
-  `infrastructures` + `components` sections; Kahn topo levels, mermaid,
+  stdlib parser for `manifest.yml`: `version` + `environments` (with nested
+  `infrastructures`) + `components`; Kahn topo levels, mermaid,
   `gh workflow
   run` dispatch + conclusion polling).
   `jitpack-install.sh` (bash) is the exception: JitPack install step for
