@@ -50,10 +50,8 @@ jobs:
   ci:
     name: CI
     needs: validate
-    uses: ./.github/workflows/app-ci.yml
+    uses: ./.github/workflows/app-ci-core.yml
     secrets: inherit
-    with:
-      final-report: false
 
   publish-image:
     name: Publish Image
@@ -113,8 +111,8 @@ jobs:
           tag_name: ${{ needs.validate.outputs.version }}
           generate_release_notes: true
 
-  # Tracing + Summary close the pipeline (in that order). The nested CI call
-  # suppresses its own (final-report: false) so they appear once.
+  # Tracing + Summary close the pipeline (in that order). The nested call is
+  # app-ci-core (no reports) so they appear once — never duplicated.
   tracing:
     name: Tracing
     runs-on: ubuntu-latest

@@ -49,13 +49,11 @@ jobs:
   ci:
     name: CI
     needs: validate
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/ci-core.yml
     secrets: inherit
-    with:
-      final-report: false
 
   # Gate: japicmp fails the release when the API diff is incompatible with the
-  # version bump being made (semver rules, incl. 0.x). Report stays in ci.yml.
+  # version bump being made (semver rules, incl. 0.x). Report job lives in ci-core.
   compat:
     name: Compat
     needs: [validate, ci]

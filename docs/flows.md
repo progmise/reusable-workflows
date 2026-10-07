@@ -78,14 +78,15 @@ flowchart TD
 | Tracing | OTLP spans → Grafana Cloud (skipped if not configured) |
 | Summary | Job matrix + findings recap in the run summary |
 
-Nested callers can pass `final-report: false` → Tracing/Summary are skipped
-inside the call and run once at the outer workflow level.
+The check jobs live in `app-ci-core.yml` (no reports). `app-ci` wraps the
+core + Tracing/Summary for PRs; integration/release call the core directly
+and emit their own — so the report pair never duplicates in a run.
 
 ### `app-integration.yml` — merge to `development`/`main`
 
 ```mermaid
 flowchart TD
-    subgraph CI["CI (app-ci, final-report: false)"]
+    subgraph CI["CI (app-ci-core)"]
         C1[Setup → Build artifact → Build image → SAST ‖ SCA ‖ CSA]
     end
     CI --> P[Publish Image]
@@ -111,7 +112,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     S[Setup] --> V[Validate]
-    V --> CI["CI (app-ci, final-report: false)"]
+    V --> CI["CI (app-ci-core)"]
     V --> P[Publish Image]
     CI --> P
     P --> R[Release]
@@ -218,7 +219,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     S[Setup] --> V[Validate]
-    V --> CI["CI (ci.yml)"]
+    V --> CI["CI (ci-core)"]
     V --> CP[Compat]
     CI --> CP
     V --> P[Publish]
@@ -245,7 +246,8 @@ Validate (semver/tag exists/published check) → CI + Compat gate (japicmp
   `trivy-report`, `compat-report` — all uploaded per job, retained by GitHub
   defaults.
 - **Tracing/Summary always run** (`if: always()`) so failures still emit
-  spans and recap. Nested CI calls suppress their own via `final-report`.
+  spans and recap. Nested calls use `ci-core`/`app-ci-core` (no reports) so
+  the pair never appears twice.
 - **Empty matrix = failure** on GitHub — that's why `app-integration`
   guards `deploy` with `envs != '[]'` and `app-deploy` takes a single env.
 - Secrets never reach logs; `GRAFANA_OTLP_AUTH` only goes into the OTLP

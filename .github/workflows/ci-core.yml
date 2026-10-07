@@ -1,0 +1,206 @@
+name: CI Core
+
+# Internal — the check jobs shared by ci.yml (PRs, adds Tracing+Summary) and
+# release.yml (adds its own reports). Never called directly by consumers.
+#   Setup → Build → SCA ‖ API Compat ‖ SAST
+
+on:
+  workflow_call:
+
+jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\` (${{ github.sha }})"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+            if [ -f pom.xml ]; then echo "- Build: Maven"; else echo "- Build: Gradle"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build
+    needs: setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: ./gradlew assemble --no-daemon
+
+      - name: Build (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests package
+
+      - name: Test + JaCoCo (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/ci.init.gradle.kts -o /tmp/ci.init.gradle.kts
+          ./gradlew test --no-daemon -I /tmp/ci.init.gradle.kts
+
+      - name: Test + JaCoCo (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp test
+
+      - name: Coverage summary
+        run: |
+          CSV=$(find build target -name 'jacoco*.csv' 2>/dev/null | head -1)
+          test -n "$CSV" && awk -F',' 'NR>1 {lm+=$8; lc+=$9; bm+=$6; bc+=$7} END {
+            printf "### Coverage\n" >> ENVIRON["GITHUB_STEP_SUMMARY"]
+            printf "- Lines: **%.1f%%** (%d/%d)\n", lc/(lc+lm)*100, lc, lc+lm >> ENVIRON["GITHUB_STEP_SUMMARY"]
+            printf "- Branches: **%.1f%%** (%d/%d)\n", (bc+bm)? bc/(bc+bm)*100 : 100, bc, bc+bm >> ENVIRON["GITHUB_STEP_SUMMARY"]
+          }' "$CSV" || true
+
+      - name: Upload test & coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/
+            build/reports/jacoco/
+            build/test-results/
+            target/surefire-reports/
+            target/site/jacoco/
+          retention-days: 30
+
+  trivy:
+    name: SCA
+    needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Gradle needs a lockfile for Trivy; Maven repos are scanned via pom.xml
+      # and Trivy resolves poms from the local ~/.m2 first — a warm repo avoids
+      # hitting Maven Central (429 rate limits observed).
+      - name: Generate dependency lockfile (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/init/security.init.gradle.kts -o /tmp/security.init.gradle.kts
+          ./gradlew dependencies --write-locks --no-daemon -I /tmp/security.init.gradle.kts
+
+      - name: Resolve dependencies (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests dependency:go-offline
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz | tar -xz trivy
+          sudo mv trivy /usr/local/bin/
+          trivy version
+
+      # Binary + retry instead of trivy-action: Maven Central rate-limits
+      # (429 + Retry-After) and the action has no retry. Transient 429s retry
+      # with backoff; a real finding set still exits 1.
+      - name: Trivy vulnerability scan
+        run: |
+          for attempt in 1 2 3; do
+            trivy fs --scanners vuln,secret --severity CRITICAL,HIGH \
+              --ignore-unfixed --format json --output trivy-results.json . && break
+            code=$?
+            [ "$attempt" -eq 3 ] && exit "$code"
+            sleep $((attempt * 60))
+          done
+          # non-zero from findings (not infra) must still fail the job
+          test -f trivy-results.json || exit 1
+          count=$(jq '[.Results[]?.Vulnerabilities // empty | length] | add // 0' trivy-results.json)
+          [ "$count" -eq 0 ] || exit 1
+
+      - name: Trivy findings
+        if: always()
+        run: |
+          test -f trivy-results.json && jq -r '.Results[]? | select(.Vulnerabilities) |
+            .Target as $t | .Vulnerabilities[] |
+            "\(.Severity)\t\(.VulnerabilityID)\t\(.PkgName) \(.InstalledVersion)\t(\($t))"' trivy-results.json || true
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-results.json
+          retention-days: 30
+
+  api-compat:
+    name: API Compat
+    needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build jar (Gradle)
+        if: hashFiles('pom.xml') == ''
+        run: ./gradlew jar --no-daemon
+
+      - name: Build jar (Maven)
+        if: hashFiles('pom.xml') != ''
+        run: ./mvnw -B -ntp -DskipTests package
+
+      - name: API compatibility report
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/api-compat.py \
+            -o api-compat.py && python3 api-compat.py
+
+      - name: Upload API compat report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compat-report
+          path: japicmp.xml
+          retention-days: 30
+
+  semgrep:
+    name: SAST
+    needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep SAST
+        run: pipx run semgrep scan --config p/java --error --metrics=off --json --output semgrep-results.json
+
+      - name: Semgrep findings
+        if: always()
+        run: |
+          test -f semgrep-results.json && jq -r '.results[]? |
+            "\(.extra.severity)\t\(.check_id)\t\(.path):\(.start.line)"' semgrep-results.json || true
+
+      - name: Upload Semgrep report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-report
+          path: semgrep-results.json
+          retention-days: 30

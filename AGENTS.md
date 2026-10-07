@@ -14,9 +14,6 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
   - libs: `ci.yml`, `integration.yml`, `release.yml`
-  - libs `ci.yml` and apps `app-ci.yml` both take `inputs.final-report`
-    (default true) — nested callers (`release.yml` for libs, `app-integration`/
-    `app-release` for apps) pass `false` so Tracing/Summary don't duplicate
   - apps (APIs, SPAs, CLIs — anything dockerized): `app-ci.yml` (adds Build image + CSA vs lib ci), `app-integration.yml`
     (+ Publish Image → Docker Hub + Deploy to non-pro envs from
     `vars.DEPLOY_ENVIRONMENTS`), `app-release.yml` (+ Publish Image +
@@ -26,6 +23,10 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
     only by `deploy-manifest` (manifest validation → draft release →
     topo-sorted dispatch of each repo's `deploy.yml`, level by level);
     needs `ORCHESTRATOR_TOKEN` (PAT with `actions:write` on consumers)
+  - `ci-core.yml` / `app-ci-core.yml` hold the check jobs only (no
+    Tracing/Summary) — `ci.yml`/`app-ci.yml` wrap them for PRs;
+    `release.yml`/`app-release.yml`/`app-integration.yml` call the core
+    directly so Tracing/Summary never appear twice in a run
   - tracing is an inline job in every workflow — a `uses:` nested call would
     show "tracing / tracing"; Tracing/Summary always run last, in that order
   - job display names are Title Case (`Setup`, `Build artifact`, `SAST`,

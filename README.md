@@ -8,10 +8,12 @@ lives here, versioned via the `v1` tag.
 
 | File | Purpose |
 |---|---|
-| `.github/workflows/ci.yml` | `workflow_call` (libs): Setup → Build+test (JaCoCo) → SCA (Trivy) ‖ SAST (Semgrep) ‖ API Compat (japicmp) → Tracing → Summary |
+| `.github/workflows/ci-core.yml` | `workflow_call` (libs, internal): Setup → Build+test (JaCoCo) → SCA (Trivy) ‖ SAST (Semgrep) ‖ API Compat (japicmp) — the check jobs only |
+| `.github/workflows/ci.yml` | `workflow_call` (libs): ci-core + Tracing → Summary (for PRs) |
 | `.github/workflows/integration.yml` | `workflow_call` (libs): ci + JitPack SHA report |
 | `.github/workflows/release.yml` | `workflow_call` (libs): Setup → Validate (semver + monotonic + not-published) → CI → Compat gate → Publish to Maven Central → tag + GH Release → Tracing → Summary |
-| `.github/workflows/app-ci.yml` | `workflow_call` (deployable services): Setup → Build artifact → Build image → SAST ‖ SCA ‖ CSA (Trivy image) → Tracing → Summary (`inputs.final-report: false` suppresses the last two when the caller adds its own) |
+| `.github/workflows/app-ci-core.yml` | `workflow_call` (deployable services, internal): Setup → Build artifact → Build image → SAST ‖ SCA ‖ CSA (Trivy image) — the check jobs only |
+| `.github/workflows/app-ci.yml` | `workflow_call` (deployable services): app-ci-core + Tracing → Summary (for PRs) |
 | `.github/workflows/app-integration.yml` | `workflow_call` (deployable services): ci + Publish Image to Docker Hub (`:<sha>`, `:edge`/`:latest`) → Deploy non-pro envs (Vercel; `DEPLOY_ENVIRONMENTS` minus `pro`) → Tracing → Summary |
 | `.github/workflows/app-release.yml` | `workflow_call` (deployable services): Setup → Validate → CI → Publish Image (`:<version>` + `:latest`) → tag + GH Release → Tracing → Summary. **Never deploys** — production deploys run via `app-deploy` / the orchestrator |
 | `.github/workflows/app-deploy.yml` | `workflow_call` (deployable services): manual deploy of a released tag to one env — Validate (env in `DEPLOY_ENVIRONMENTS` + tag + image) → Deploy (Vercel, `--prod` only for `pro`) → Tracing → Summary |
