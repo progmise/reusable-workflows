@@ -23,7 +23,9 @@ jobs:
             echo "### Setup"
             echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\` (${{ github.sha }})"
             echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
-            if [ -f pom.xml ]; then echo "- Build: Maven"; else echo "- Build: Gradle"; fi
+            if [ -f pom.xml ]; then echo "- Build: Maven";
+            elif [ -f package.json ]; then echo "- Build: npm";
+            else echo "- Build: Gradle"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
