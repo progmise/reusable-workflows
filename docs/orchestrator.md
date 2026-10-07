@@ -70,7 +70,7 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 | Topo-sort + deploy por niveles | `scripts/topo-deploy.py` + `orch-deploy.yml` |
 | deploy-orchestrator + polling | `gh workflow run app-deploy.yml` por repo + poll de conclusión |
 | Notify Deployment | Step summary (+ webhook opcional a futuro) |
-| Gluon front | `deploy-dashboard` — SPA React/Vite + backend Express (GitHub OAuth), container en Vercel |
+| Gluon front | `deploy-orchestrator` — SPA React/Vite (UI Gluon-style) + `deploy-orchestrator-api` (Express: GitHub OAuth + allowlist + proxy), containers en Vercel |
 
 ### `deploy-manifest` repo (nuevo)
 
@@ -114,11 +114,12 @@ components:
   `DEPLOY_ENVIRONMENTS`).
 - Reusar `app-deploy.yml` existente — ya valida tag + imagen en registry y
   despliega a Vercel por `version`.
-- Front: `progmise/deploy-dashboard` — SPA React/Vite + backend Express.
-  Login con GitHub OAuth (client_secret server-side, token del usuario en
-  cookie HttpOnly), proxy `/api/gh/*` a la Actions API con ese token. Deploya
-  como container en Vercel (preset `Container`; buildea el `Dockerfile`
-  raíz) vía el
+- Front: `progmise/deploy-orchestrator` — SPA React/Vite servida por un shell
+  Express que proxea `/api/*` a `progmise/deploy-orchestrator-api`
+  (`API_UPSTREAM`). La API hace OAuth (client_secret server-side, token del
+  usuario en cookie HttpOnly), enforcea `ALLOWED_USERS` y proxea
+  `/api/gh/*` a la Actions API con ese token. Ambos deployan como container
+  en Vercel (preset `Container`; buildea el `Dockerfile` raíz) vía el
   mismo pipeline `app-*`.
 
 ## Pendiente al retomar

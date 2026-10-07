@@ -56,5 +56,5 @@ to extend) for Deploy — also skipped when unset.
 
 Consumers pinning `@v1`: `api-commons`, `java-maven-lib-template` (libs:
 `ci`/`integration`/`release`), `loans-api`, `java-maven-api-template`,
-`node-react-app-template`, `node-express-api-template`, `deploy-dashboard`,
+`node-react-app-template`, `node-express-api-template`, `deploy-orchestrator`,
 `deploy-orchestrator-api` (apps: `app-*`), `deploy-manifest` (`orch-*`).

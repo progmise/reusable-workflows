@@ -7,7 +7,7 @@ in the Actions UI. Consumers only hold thin callers; all logic lives here.
 
 ```mermaid
 flowchart LR
-    subgraph API["App repos (loans-api, deploy-dashboard — APIs/SPAs/CLIs)"]
+    subgraph API["App repos (loans-api, deploy-orchestrator — APIs/SPAs/CLIs)"]
         A_PR["PR → development/main<br/><code>ci.yml</code> caller"]
         A_PUSH["merge → development/main<br/><code>integration.yml</code> caller"]
         A_REL["dispatch<br/><code>release.yml</code> caller"]
