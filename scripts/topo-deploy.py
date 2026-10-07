@@ -21,6 +21,7 @@ Manifest shape (strict):
           properties:              # free-form provider fields (OAM style)
             project: loans-api
             credentialsId: VERCEL_TOKEN  # name of the secret in the consumer
+            orgIdVar: VERCEL_ORG_ID      # name of the variable in the consumer
   components:
     - name: loans-api
       repo: progmise/loans-api
