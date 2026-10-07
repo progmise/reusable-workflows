@@ -51,8 +51,10 @@ secret `DOCKER_TOKEN` + var `DOCKER_USERNAME` (image namespace — public info,
 kept as var so image names aren't masked in logs) for Publish Image —
 **skipped entirely when unset**, so templates run CI green with zero
 credentials; secret `VERCEL_TOKEN` + vars `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`
-+ `DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default — add `"cert"`/`"pre"`
-to extend) for Deploy — also skipped when unset.
+(may be empty — the project is created lazily on first deploy via
+`scripts/ensure-vercel-project.sh`) + `DEPLOY_ENVIRONMENTS` (JSON list;
+`["pro"]` default — add `"cert"`/`"pre"` to extend) for Deploy — skipped when
+`VERCEL_ORG_ID` is unset.
 
 Consumers pinning `@v1`: `api-commons`, `java-maven-lib-template` (libs:
 `ci`/`integration`/`release`), `loans-api`, `java-maven-api-template`,

@@ -105,7 +105,10 @@ flowchart TD
   non-`pro` entries. **Deploy** is a matrix job over them — with the default
   `["pro"]` the matrix is empty and the job is skipped (prod never deploys
   on merge).
-- Skipped when `VERCEL_PROJECT_ID` is not set.
+- Skipped when `VERCEL_ORG_ID` is not set. `VERCEL_PROJECT_ID` may be empty —
+  `scripts/ensure-vercel-project.sh` creates the Vercel project lazily on
+  first deploy (named after the repo, no framework preset) and back-fills the
+  repo variable when a token with variables write is present.
 
 ### `app-release.yml` — manual dispatch
 
