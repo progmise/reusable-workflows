@@ -83,8 +83,9 @@ environments:              # targets declarados (opcional)
     infrastructures:       # infra nested por ambiente (modelo OAM)
       - id: loans-api-pro  # equivalente al ci_id de Gluon
         type: vercel       # vercel | artifact-store | ...
-        project: loans-api
-        credentialsId: VERCEL_TOKEN   # nombre del secret en el repo consumidor
+        properties:        # campos del provider (como OAM)
+          project: loans-api
+          credentialsId: VERCEL_TOKEN   # nombre del secret en el consumer
 components:
   - name: loans-api
     repo: progmise/loans-api

@@ -18,8 +18,9 @@ Manifest shape (strict):
       infrastructures:             # infra targets under this env
         - id: loans-api-pro
           type: vercel             # vercel | artifact-store | kubernetes | ...
-          project: loans-api       # free-form provider fields
-          credentialsId: VERCEL_TOKEN  # name of the secret in the consumer
+          properties:              # free-form provider fields (OAM style)
+            project: loans-api
+            credentialsId: VERCEL_TOKEN  # name of the secret in the consumer
   components:
     - name: loans-api
       repo: progmise/loans-api
@@ -46,20 +47,22 @@ def parse(path):
     Indentation contract: top-level keys at column 0, section items at
     `  - `, item fields at `    `, and inside an environment item an
     `infrastructures:` list whose entries sit at `      - ` with fields
-    at `        `.
+    at `        ` — plus a `properties:` map at `        ` whose keys
+    live at `          `.
     """
     manifest = {s: [] for s in SECTIONS}
     section = None
     current = None      # open item of the current section
     sub = None          # open infrastructures[] item
     in_sub = False      # inside an environment's infrastructures: list
+    in_props = False    # inside an infra item's properties: map
 
     def flush_sub():
-        nonlocal sub, in_sub
+        nonlocal sub, in_sub, in_props
         if sub is not None:
             current["infrastructures"].append(sub)
             sub = None
-        in_sub = False
+        in_sub = in_props = False
 
     def flush_item():
         nonlocal current
@@ -85,12 +88,23 @@ def parse(path):
             if sub is not None:
                 current["infrastructures"].append(sub)
             sub = {}
+            in_props = False
             m = re.match(r"^      - (\w[\w-]*):\s*(.*)$", line)
             if not m:
                 fail(f"line {n}: bad infrastructure entry: {raw.rstrip()}")
             sub[m.group(1)] = m.group(2).strip().strip('"')
+        elif line.startswith("          ") and in_props and sub is not None \
+                and key_val:
+            sub["properties"][key_val.group(1)] = \
+                key_val.group(2).strip().strip('"')
         elif line.startswith("        ") and sub is not None and key_val:
-            sub[key_val.group(1)] = key_val.group(2).strip().strip('"')
+            k, v = key_val.group(1), key_val.group(2).strip()
+            if k == "properties" and not v:
+                sub["properties"] = {}
+                in_props = True
+            else:
+                in_props = False
+                sub[k] = v.strip('"')
         elif line.startswith("  - ") and section:
             flush_item()
             current = {}
