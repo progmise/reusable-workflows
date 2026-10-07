@@ -76,12 +76,22 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 
 ```yaml
 # manifest.yml — una "release" desplegable
-version: 1.0.0
+version: 1.1.0
+environments:              # targets declarados (opcional)
+  - name: pro
+    type: production
+infrastructures:           # infra por ambiente (opcional)
+  - id: loans-api-pro
+    type: vercel           # vercel | artifact-store | ...
+    env: pro
+    project: loans-api
+    credentialsId: VERCEL_TOKEN   # nombre del secret en el repo consumidor
 components:
   - name: loans-api
     repo: progmise/loans-api
     tag: 0.1.0            # tag/imagen a desplegar
     needs: []
+    infra: [loans-api-pro] # opcional — a qué infra despliega (gate por env)
   - name: amortization-api
     repo: progmise/amortization-api
     tag: 0.2.0
