@@ -70,7 +70,7 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 | Topo-sort + deploy por niveles | `scripts/topo-deploy.py` + `orch-deploy.yml` |
 | deploy-orchestrator + polling | `gh workflow run app-deploy.yml` por repo + poll de conclusión |
 | Notify Deployment | Step summary (+ webhook opcional a futuro) |
-| Gluon front | `deploy-dashboard` — SPA React/Vite en GitHub Pages |
+| Gluon front | `deploy-dashboard` — SPA React/Vite + backend Express (GitHub OAuth), container en Vercel |
 
 ### `deploy-manifest` repo (nuevo)
 
@@ -114,9 +114,11 @@ components:
   `DEPLOY_ENVIRONMENTS`).
 - Reusar `app-deploy.yml` existente — ya valida tag + imagen en registry y
   despliega a Vercel por `version`.
-- Front: `progmise/deploy-dashboard` — SPA React/Vite en GitHub Pages
-  que lee `manifest.yml` + Actions API (read-only; PAT opcional en
-  localStorage para subir el rate limit).
+- Front: `progmise/deploy-dashboard` — SPA React/Vite + backend Express.
+  Login con GitHub OAuth (client_secret server-side, token del usuario en
+  cookie HttpOnly), proxy `/api/gh/*` a la Actions API con ese token. Deploya
+  como container en Vercel (preset `Container` + `Dockerfile.vercel`) vía el
+  mismo pipeline `app-*`.
 
 ## Pendiente al retomar
 

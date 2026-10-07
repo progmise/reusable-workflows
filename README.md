@@ -1,6 +1,8 @@
 # reusable-workflows
 
-Central reusable workflows for the `progmise` Java libraries. Consumer repos
+Central reusable workflows for the `progmise` Java libraries, deployable
+services (APIs, SPAs, CLIs — anything dockerized) and the deploy orchestrator.
+Consumer repos
 keep only thin callers in their `.github/workflows/` — all pipeline logic
 lives here, versioned via the `v1` tag.
 
@@ -41,12 +43,17 @@ Consumers only need their build files (`pom.xml`+`mvnw`, or Gradle equivalents) 
 (`SONATYPE_*`, `GPG_*`, optional `GRAFANA_OTLP_AUTH`) and the
 `GRAFANA_OTLP_ENDPOINT` variable — everything else comes from this repo.
 
-API consumers additionally need: a self-contained `Dockerfile` at the repo
-root (multi-stage source build — the same file is used by `docker build`,
-compose and Vercel, which builds it automatically), secret `DOCKER_TOKEN`
-(image publish) and optional secret
-`VERCEL_TOKEN`, and vars `DOCKER_USERNAME` (image namespace — public info,
-kept as var so image names aren't masked in logs), `VERCEL_ORG_ID`/
-`VERCEL_PROJECT_ID` + `DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default —
-add `"cert"`/`"pre"` to extend). Deploy jobs skip silently when the Vercel
-vars are unset.
+App consumers additionally need: a self-contained `Dockerfile` at the repo
+root (multi-stage source build — the same file serves `docker build` and
+compose; for Vercel container deploys ship `Dockerfile.vercel` alongside and
+set the project's Framework Preset to `Container`), and optionally:
+secret `DOCKER_TOKEN` + var `DOCKER_USERNAME` (image namespace — public info,
+kept as var so image names aren't masked in logs) for Publish Image —
+**skipped entirely when unset**, so templates run CI green with zero
+credentials; secret `VERCEL_TOKEN` + vars `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`
++ `DEPLOY_ENVIRONMENTS` (JSON list; `["pro"]` default — add `"cert"`/`"pre"`
+to extend) for Deploy — also skipped when unset.
+
+Consumers pinning `@v1`: `api-commons`, `java-maven-lib-template` (libs:
+`ci`/`integration`/`release`), `loans-api`, `java-maven-api-template`,
+`deploy-dashboard` (apps: `app-*`), `deploy-manifest` (`orch-*`).
