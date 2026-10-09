@@ -105,8 +105,8 @@ jobs:
           VERCEL_PROJECT_ID: ${{ steps.vercel.outputs.project_id }}
           REPO: ${{ github.event.repository.name }}
         run: |
-          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/prune-vcr-images.sh -o prune-vcr-images.sh
-          bash prune-vcr-images.sh || true
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/prune-vcr-images.py -o prune-vcr-images.py
+          python3 prune-vcr-images.py || true
 
       - name: Deploy to Vercel
         env:
