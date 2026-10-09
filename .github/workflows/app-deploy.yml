@@ -17,6 +17,11 @@ on:
         type: string
         default: 'pro'
         description: 'Target environment (must be in vars.DEPLOY_ENVIRONMENTS)'
+      ci_id:
+        required: false
+        type: string
+        default: ''
+        description: 'Manifest infrastructures[].id this deploy targets (orchestrator passes it)'
 
 permissions:
   contents: read
@@ -37,6 +42,7 @@ jobs:
             echo "### Setup"
             echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\`"
             echo "- Deploy version: \`${{ inputs.version }}\` → \`${{ inputs.environment }}\`"
+            [ -n "${{ inputs.ci_id }}" ] && echo "- Infra (ci_id): \`${{ inputs.ci_id }}\`"
             echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

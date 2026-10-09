@@ -16,6 +16,11 @@ on:
         required: false
         default: 'pro'
         type: string
+      release_no:
+        description: 'Dashboard release number (RLSE…) — required for pro'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -43,6 +48,14 @@ jobs:
           echo "$ENVS" | jq -e --arg e "$ENVIRONMENT" 'index($e)' >/dev/null || {
             echo "::error::environment '$ENVIRONMENT' not in DEPLOY_ENVIRONMENTS ($ENVS)"
             exit 1; }
+          # Production deploys are dashboard-driven only: the UI passes the
+          # RLSE number it minted, so a bare manual dispatch of `pro` fails here.
+          R="${{ inputs.release_no }}"
+          if [ "$ENVIRONMENT" = "pro" ] && ! echo "$R" | grep -qE '^RLSE[0-9]+$'; then
+            echo "::error::production deploys must be triggered from the dashboard"
+            echo "::error::  (a release number like RLSE0000001 is required for pro)"
+            exit 1
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
 
