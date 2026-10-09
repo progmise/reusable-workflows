@@ -95,6 +95,19 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ensure-vercel-project.sh -o ensure-vercel-project.sh
           bash ensure-vercel-project.sh
 
+      # Keep the project's Vercel Container Registry below the image cap —
+      # a full registry makes `vercel deploy` fail at push time. Runs before
+      # the deploy so a retry self-heals even after hitting the cap.
+      - name: Prune VCR images
+        continue-on-error: true
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ steps.vercel.outputs.project_id }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/prune-vcr-images.sh -o prune-vcr-images.sh
+          bash prune-vcr-images.sh || true
+
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
