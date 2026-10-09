@@ -27,7 +27,8 @@ Manifest shape (strict):
       repo: progmise/loans-api
       tag: "0.1.0"
       needs: [other-api]
-      infra: [loans-api-pro]       # optional — binds component to infra ids
+      infra: [loans-api-pro]       # required — ci_ids binding the component to
+                                   # infrastructures[].id (which env it deploys to)
 """
 import json
 import os
@@ -211,6 +212,9 @@ def validate(manifest):
         for field in ("name", "repo", "tag"):
             if not c.get(field):
                 errors.append(f"{c.get('name','?')}: missing '{field}'")
+        if not c.get("infra"):
+            errors.append(f"{c.get('name', '?')}: missing 'infra' — bind the "
+                          "component to at least one infrastructures[].id")
         for ref in c.get("infra", []):
             if ref not in infra_ids:
                 errors.append(f"{c.get('name', '?')}: unknown infrastructure "
@@ -268,13 +272,14 @@ def deploy(manifest, env):
             bound = c.get("infra") or []
             targets = [x for x in bound
                        if infra_by_id.get(x, (None,))[0] == env]
-            if bound and not targets:
+            if not targets:
                 return results, False, (f"{c['name']}: no infrastructure "
                                         f"binding for env '{env}'")
-            gh("workflow", "run", "deploy.yml", "-R", c["repo"],
-               "-f", f"version={c['tag']}", "-f", f"environment={env}")
-            print(f"dispatched {c['repo']}@{c['tag']} → {env}"
-                  + (f" ({', '.join(targets)})" if targets else ""))
+            for ci_id in targets:
+                gh("workflow", "run", "deploy.yml", "-R", c["repo"],
+                   "-f", f"version={c['tag']}", "-f", f"environment={env}",
+                   "-f", f"ci_id={ci_id}")
+                print(f"dispatched {c['repo']}@{c['tag']} → {env} ({ci_id})")
         for c in level:  # poll every component of the level to conclusion
             run = None
             for _ in range(120):  # up to ~20 min per component

@@ -45,7 +45,9 @@ flowchart LR
     M_PR --> RW_OCI
     M_PUSH --> RW_ORE
     M_DEP --> RW_ODE
-    RW_ODE -. "dispatches deploy.yml<br/>per component repo" .-> A_DEP
+    RW_ODE -. "dispatches deploy.yml<br/>per component repo + ci_id" .-> A_DEP
+    DASH["deploy-orchestrator UI"]
+    DASH -. "API dispatch: version+env+release_no<br/>(pro requires RLSE…)" .-> M_DEP
 ```
 
 ---
