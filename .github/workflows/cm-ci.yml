@@ -1,0 +1,75 @@
+name: CM CI
+
+# Reusable CI for ConfigMap components — invoked by each CM repo's thin ci.yml
+# on pull_request. There is no build artifact: validation IS the pipeline
+# (config files parse, flat env-var keys, key parity across envs, no secrets).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\`"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate
+    needs: setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate config files
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/cm-config.py -o cm-config.py
+          python3 cm-config.py validate config
+
+  # Tracing + Summary close the pipeline (in that order).
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, tracing]
+    steps:
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true
