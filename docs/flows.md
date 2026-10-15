@@ -173,7 +173,7 @@ flowchart LR
 
 Publishing the draft is the approval gate — `orch-deploy` refuses drafts.
 
-### `orch-deploy.yml` — manual dispatch `{version, environment}`
+### `orch-deploy.yml` — manual dispatch `{version, environment, release_no}`
 
 ```mermaid
 flowchart TD
