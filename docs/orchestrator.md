@@ -87,10 +87,16 @@ environments:              # targets declarados (opcional)
           project: loans-api
           credentialsId: VERCEL_TOKEN   # nombre del secret en el consumer
 components:
+  - name: loans-api-cm
+    repo: progmise/loans-api-cm
+    tag: 0.1.0
+    type: configmap        # default: app — CM despacha con `project` y sin docker check
+    needs: []
+    infra: [loans-api-pro] # mismos ci_ids del app que configura
   - name: loans-api
     repo: progmise/loans-api
     tag: 0.1.0            # tag/imagen a desplegar
-    needs: []
+    needs: [loans-api-cm] # el config aterriza antes que el app
     infra: [loans-api-pro] # opcional — a qué infra despliega (gate por env)
   - name: amortization-api
     repo: progmise/amortization-api
@@ -110,6 +116,11 @@ components:
   `app-deploy.yml` en cada repo (`gh workflow run` con PAT/token) → poll hasta
   conclusión → Summary con diagrama + resultados.
 - Callers thin en `deploy-manifest/.github/workflows/`.
+- ConfigMap components (`type: configmap`, repos `*-cm` generados desde
+  `vercel-configmap-template`): `cm-ci`/`cm-release`/`cm-deploy` — el
+  equivalente Vercel del ConfigMap K8s de Gluon. Despliegan upserting env
+  vars en el proyecto Vercel del app (`infra properties.project`), y el app
+  los declara en `needs:` para que el config aterrice antes del deploy.
 
 ### Notas de implementación
 

@@ -52,6 +52,12 @@ def read_version() -> str:
     if os.path.exists("package.json"):
         return json.load(open("package.json")).get("version", "")
 
+    if os.path.exists("version.txt"):  # config repos (ConfigMap components)
+        return open("version.txt").read().strip()
+
+    if not os.path.exists("build.gradle.kts"):
+        return ""
+
     m = re.search(r'^version\s*=\s*"([^"]+)"',
                   open("build.gradle.kts").read(), re.M)
 
@@ -112,7 +118,7 @@ def central_versions(group: str, artifact: str) -> list[str]:
 
 def main() -> None:
     kind = sys.argv[sys.argv.index("--kind") + 1] if "--kind" in sys.argv else "lib"
-    kind = "app" if kind == "api" else kind  # legacy alias
+    kind = "app" if kind in ("api", "cm") else kind  # legacy/other-kind aliases
 
     if os.environ.get("GITHUB_REF_NAME") != "main":
         fail("The Release workflow must run on main")
