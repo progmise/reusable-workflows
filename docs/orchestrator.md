@@ -105,7 +105,8 @@ components:
   Docker Hub.
 - `orch-release.yml` (merge a main): topo-sort + Mermaid en summary + crea
   GitHub Release del manifiesto con la versión.
-- `orch-deploy.yml` (dispatch `{version, env}`): checkout manifest@version →
+- `orch-deploy.yml` (dispatch `{version, env, release_no}` — el RLSE del
+  dashboard es requerido para `pro`): checkout manifest@version →
   `topo-deploy.py` produce niveles → por nivel, matrix despacha
   `app-deploy.yml` en cada repo (`gh workflow run` con PAT/token) → poll hasta
   conclusión → Summary con diagrama + resultados.
