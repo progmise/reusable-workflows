@@ -1,0 +1,149 @@
+name: Secrets Deploy
+
+# Reusable deploy for Secrets components — invoked by each secrets repo's
+# thin deploy.yml (workflow_dispatch, or by the deploy-manifest
+# orchestrator). Reads secrets/<environment>/secrets-<environment>.y*ml at
+# the release tag, resolves each declared name to its value from the
+# platform credential store (Supabase Vault — `NAME__ENV` keys), and upserts
+# each one as a `sensitive` env var on the target Vercel project (the
+# manifest infra's properties.project, passed by the orchestrator).
+#
+# Values are piped straight into vercel-env-sync.py — they are never
+# committed, logged, or echoed to the step summary.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: 'Secrets version (git tag) to deploy, e.g. 0.2.0'
+      environment:
+        required: false
+        type: string
+        default: 'pro'
+        description: 'Manifest environment (maps to vercel target: pro → production, else preview)'
+      ci_id:
+        required: false
+        type: string
+        default: ''
+        description: 'Manifest infrastructures[].id this deploy targets (orchestrator passes it)'
+      project:
+        required: false
+        type: string
+        default: ''
+        description: 'Target Vercel project — infra properties.project (orchestrator passes it; required)'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\`"
+            echo "- Deploy version: \`${{ inputs.version }}\` → \`${{ inputs.environment }}\`"
+            [ -n "${{ inputs.ci_id }}" ] && echo "- Infra (ci_id): \`${{ inputs.ci_id }}\`"
+            echo "- Target project: \`${{ inputs.project }}\`"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate
+    needs: setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+
+      - name: Validate environment + version + declarations
+        env:
+          VERSION: ${{ inputs.version }}
+          ENV: ${{ inputs.environment }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          set -e
+          [ -n "$PROJECT" ] || { echo "::error::input 'project' is required — the target Vercel project (manifest infra properties.project)"; exit 1; }
+          git ls-remote --exit-code --tags origin "$VERSION" > /dev/null \
+            || { echo "::error::Tag $VERSION does not exist"; exit 1; }
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/sec-config.py -o sec-config.py
+          python3 sec-config.py validate secrets
+          python3 sec-config.py names "$ENV" secrets > /dev/null  # env file must exist
+
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    needs: validate
+    if: ${{ vars.VERCEL_ORG_ID != '' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+
+      - name: Resolve secrets + upsert env vars into Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ENV: ${{ inputs.environment }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          set -e
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/sec-config.py -o sec-config.py
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/vercel-env-sync.py -o vercel-env-sync.py
+          TARGET="preview"; [ "$ENV" = "pro" ] && TARGET="production"
+          python3 sec-config.py env "$ENV" secrets | python3 vercel-env-sync.py "$PROJECT" "$TARGET" sensitive
+          {
+            echo "### Deploy ${{ inputs.environment }} — ${{ inputs.version }}"
+            echo "- Secrets \`${{ github.event.repository.name }}\` → project \`$PROJECT\` (target \`$TARGET\`, type \`sensitive\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Tracing + Summary close the pipeline (in that order).
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, deploy]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, deploy, tracing]
+    steps:
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true
