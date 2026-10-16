@@ -26,15 +26,15 @@ Manifest shape (strict):
     - name: loans-api
       repo: progmise/loans-api
       tag: "0.1.0"
-      type: app                  # optional — app (default) | configmap
+      type: app                  # optional — app (default) | configmap | secrets
       needs: [loans-api-cm]      # deploy-after deps (component names, acyclic)
       infra: [loans-api-pro]     # required — ci_ids binding the component to
                                  # infrastructures[].id (which env it deploys to)
 
-  ConfigMap components (`type: configmap`) carry no docker image: the tag is
-  validated but the Docker Hub check is skipped. On deploy they are dispatched
-  the infra's `properties.project` as an extra `project` input — the Vercel
-  project whose env vars they upsert.
+  ConfigMap (`type: configmap`) and Secrets (`type: secrets`) components
+  carry no docker image: the tag is validated but the Docker Hub check is
+  skipped. On deploy they are dispatched the infra's `properties.project` as
+  an extra `project` input — the Vercel project whose env vars they upsert.
 """
 import json
 import os
@@ -218,9 +218,9 @@ def validate(manifest):
         for field in ("name", "repo", "tag"):
             if not c.get(field):
                 errors.append(f"{c.get('name','?')}: missing '{field}'")
-        if c.get("type", "app") not in ("app", "configmap"):
+        if c.get("type", "app") not in ("app", "configmap", "secrets"):
             errors.append(f"{c.get('name', '?')}: unknown type '{c['type']}' "
-                          "(app|configmap)")
+                          "(app|configmap|secrets)")
         if not c.get("infra"):
             errors.append(f"{c.get('name', '?')}: missing 'infra' — bind the "
                           "component to at least one infrastructures[].id")
@@ -234,7 +234,7 @@ def validate(manifest):
         if code != 200:
             errors.append(f"{repo}: tag '{tag}' not found (HTTP {code})")
         who = os.environ.get("DOCKER_USERNAME")
-        if who and c.get("type", "app") == "app":  # configmap/etc. ship no image
+        if who and c.get("type", "app") == "app":  # configmap/secrets ship no image
             _, code = get(
                 f"https://hub.docker.com/v2/repositories/{who}/{repo.split('/')[-1]}"
                 f"/tags/{tag}")
@@ -288,8 +288,8 @@ def deploy(manifest, env):
                 args = ["workflow", "run", "deploy.yml", "-R", c["repo"],
                         "-f", f"version={c['tag']}", "-f", f"environment={env}",
                         "-f", f"ci_id={ci_id}"]
-                if c.get("type", "app") == "configmap":
-                    # CM repos take `project` — the infra's Vercel project.
+                if c.get("type", "app") in ("configmap", "secrets"):
+                    # CM/secrets repos take `project` — the infra's Vercel project.
                     props = infra_by_id[ci_id][1].get("properties", {})
                     args += ["-f", f"project={props.get('project', '')}"]
                 gh(*args)

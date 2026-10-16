@@ -24,6 +24,12 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
     `cm-deploy.yml` (upsert env vars into the target Vercel project via
     `vercel-env-sync.py`; takes `version`, `environment`, `ci_id`, `project`
     — `project` comes from the manifest infra's `properties.project`)
+  - secrets (`*-secrets` repos — secret env vars, no code): `sec-ci.yml` /
+    `sec-release.yml` / `sec-deploy.yml` — same shape as `cm-*`, but the
+    repo only **declares** secret names under `secrets/<env>/`; deploy
+    resolves each name to its value from the credential store
+    (`SUPABASE_URL` var + `SUPABASE_SERVICE_ROLE_KEY` secret) and upserts
+    with Vercel type `sensitive` — values never touch logs/summaries
   - orchestrator: `orch-ci.yml`/`orch-release.yml`/`orch-deploy.yml` — called
     only by `deploy-manifest` (manifest validation → draft release →
     topo-sorted dispatch of each repo's `deploy.yml`, level by level);
@@ -52,15 +58,21 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   `cm-config.py` (`validate`/`env` for ConfigMap repos — flat `KEY: value`
   files under `config/<env>/`, env-var key rules, parity across envs, no
   secret-looking keys),
+  `sec-config.py` (`validate`/`names`/`env` for Secrets repos —
+  `secrets/<env>/secrets-<env>.yaml` declares names only; `env` resolves
+  each name to `<NAME>__<ENV>` in the credential store and fails on any
+  missing value),
   `vercel-env-sync.py` (upserts stdin `KEY=value` pairs as env vars on a
-  Vercel project — `POST /v10/projects/{project}/env?upsert=true`),
+  Vercel project — `POST /v10/projects/{project}/env?upsert=true`; optional
+  3rd arg is the var type, `plain` default / `sensitive` for secrets),
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
   mode fails on semver-violating bumps — used by release.yml),
   `topo-deploy.py` (`validate`/`plan`/`deploy` for `deploy-manifest` — strict
   stdlib parser for `manifest.yml`: `version` + `environments` (with nested
-  `infrastructures`) + `components` (optional `type`: `app` default or
-  `configmap` — skips the Docker Hub check and gets the bound infra's
-  `properties.project` as a `project` input on dispatch); Kahn topo levels,
+  `infrastructures`) + `components` (optional `type`: `app` default,
+  `configmap` or `secrets` — the latter two skip the Docker Hub check and
+  get the bound infra's `properties.project` as a `project` input on
+  dispatch); Kahn topo levels,
   mermaid, `gh workflow run` dispatch + conclusion polling). `components[].infra`
   is **required** — the ci_id list binding each component to
   `infrastructures[].id`; deploy dispatches once per ci_id in the target env,

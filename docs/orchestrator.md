@@ -121,6 +121,13 @@ components:
   equivalente Vercel del ConfigMap K8s de Gluon. Despliegan upserting env
   vars en el proyecto Vercel del app (`infra properties.project`), y el app
   los declara en `needs:` para que el config aterrice antes del deploy.
+- Secrets components (`type: secrets`, repos `*-secrets` generados desde
+  `vercel-secrets-template`): `sec-ci`/`sec-release`/`sec-deploy` — mismo
+  shape que CM pero el repo solo **declara** nombres
+  (`secrets/<env>/secrets-<env>.y*ml`); los valores viven en el credential
+  store (claves `NAME__ENV`, cargados desde la vista Seguridad del
+  dashboard con gate por rol) y el deploy los resuelve y upsert como
+  `sensitive` env vars. Misma mecánica de `infra`/`needs`/`project`.
 
 ### Notas de implementación
 
