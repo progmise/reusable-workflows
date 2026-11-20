@@ -109,6 +109,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.version }}
+          name: v${{ needs.validate.outputs.version }}
           generate_release_notes: true
 
   # Tracing + Summary close the pipeline (in that order). The nested call is
