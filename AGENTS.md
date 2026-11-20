@@ -74,11 +74,10 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   `configmap` or `secrets` — the latter two skip the Docker Hub check and
   get the bound infra's `properties.project` as a `project` input on
   dispatch); Kahn topo levels,
-  mermaid, `gh workflow run` dispatch + conclusion polling). `components[].infra`
-  is **required** — the ci_id list binding each component to
-  `infrastructures[].id`; deploy dispatches once per ci_id in the target env,
-  passing `ci_id` to the consumer's `deploy.yml` (callers accept it as an
-  optional input).
+  mermaid, `gh workflow run` dispatch + conclusion polling).     Each component's deploy targets are the ci_ids declared in its own
+    repo's `.deploy/targets.yml` (read at the deploy tag); `components[].infra`
+    is an optional override — deploy dispatches once per ci_id in the target
+    env, passing `ci_id` to the consumer's `deploy.yml`.
   `jitpack-install.sh` (bash) is one exception: JitPack install step for
   Maven libs, invoked by each repo's `jitpack.yml` via curl. The other is
   `ensure-vercel-project.sh` — fetched by `app-deploy.yml` to lazily create
