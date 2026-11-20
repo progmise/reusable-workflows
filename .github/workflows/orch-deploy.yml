@@ -1,7 +1,7 @@
 name: Orchestrator Deploy
 
-# Reusable — called by the deploy-manifest repo via workflow_dispatch.
-# Deploys a published manifest release: checks out manifest.yml at the
+# Reusable — called by each app-model repo via workflow_dispatch.
+# Deploys a published OAM release: checks out the definition file at the
 # release tag, topo-sorts components and dispatches each repo's deploy.yml
 # (app-deploy) level by level, polling each run to conclusion.
 on:
@@ -82,13 +82,19 @@ jobs:
       - name: Fetch topo-deploy script
         run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o topo-deploy.py
 
+      - name: Manifest file
+        run: |
+          M=manifest.yml
+          [ -f oam-application-definition.yml ] && M=oam-application-definition.yml
+          echo "MANIFEST=$M" >> "$GITHUB_ENV"
+
       - name: Deploy plan
-        run: python topo-deploy.py plan manifest.yml
+        run: python topo-deploy.py plan "$MANIFEST"
 
       - name: Orchestrated deploy
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
-        run: python topo-deploy.py deploy manifest.yml --env=${{ needs.setup.outputs.environment }}
+        run: python topo-deploy.py deploy "$MANIFEST" --env=${{ needs.setup.outputs.environment }}
 
   tracing:
     name: Tracing
