@@ -38,8 +38,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER=$(python topo-deploy.py version "$MANIFEST")
-          if gh release view "v$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-             gh release view "$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh api "repos/$GITHUB_REPOSITORY/releases" \
+             --jq '.[] | select(.draft | not) | .tag_name' | grep -qxE "v?$VER"; then
             echo "::error::release v$VER already exists in $GITHUB_REPOSITORY"
             exit 1
           fi
