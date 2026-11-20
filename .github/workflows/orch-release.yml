@@ -40,7 +40,7 @@ jobs:
         run: |
           VER=$(python topo-deploy.py version "$MANIFEST")
           gh release create "v$VER" --draft \
-            --title "Release $VER" \
-            --notes "Deploy manifest release $VER — publish to enable deploys." \
+            --title "v$VER" \
+            --notes "OAM release v$VER — publish to enable deploys." \
             --repo "$GITHUB_REPOSITORY"
           echo "draft release v$VER created — publish it to approve deploys"
