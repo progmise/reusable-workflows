@@ -28,8 +28,10 @@ Manifest shape (strict):
       tag: "0.1.0"
       type: app                  # optional — app (default) | configmap | secrets
       needs: [loans-api-cm]      # deploy-after deps (component names, acyclic)
-      infra: [loans-api-pro]     # required — ci_ids binding the component to
-                                 # infrastructures[].id (which env it deploys to)
+      infra: [loans-api-pro]     # optional override — ci_ids binding the
+                                 # component to infrastructures[].id; when
+                                 # omitted they are read from the consumer
+                                 # repo's `.deploy/targets.yml` at the tag
       rollback_version: "0.0.9"  # OAM — previous deployable version
   trails:                        # OAM — ordered promotion trails
     - name: pre-pro-trails
@@ -184,6 +186,48 @@ def get(url, token=None):
         return None, e.code
 
 
+def parse_targets(text):
+    """`.deploy/targets.yml` — a `targets:` key with `  - ci_id` items."""
+    ids, on = [], False
+    for line in text.splitlines():
+        if line.strip() == "targets:":
+            on = True
+        elif on and line.startswith("  - "):
+            ids.append(line[4:].split("#", 1)[0].strip().strip('"'))
+        elif on and line.strip():
+            break
+    return ids
+
+
+def fetch_targets(repo, token, ref=None):
+    """Raw `.deploy/targets.yml` from repo@ref (default branch when ref None);
+    None on 404 — missing file."""
+    url = (f"https://api.github.com/repos/{repo}/contents/.deploy/targets.yml"
+           + (f"?ref={ref}" if ref else ""))
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/vnd.github.raw+json",
+        **({"Authorization": f"Bearer {token}"} if token else {}),
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return parse_targets(r.read().decode())
+    except urllib.error.HTTPError:
+        return None
+
+
+def resolve_targets(c, token):
+    """Component → bound ci_ids: explicit `infra:` wins; otherwise the
+    consumer repo's `.deploy/targets.yml` at its tag (falling back to the
+    default branch for tags cut before the file existed)."""
+    if c.get("infra"):
+        return list(c["infra"])
+    repo = c.get("repo", "")
+    return (fetch_targets(repo, token, c.get("tag", ""))
+            or fetch_targets(repo, token)
+            or fetch_targets(repo, token, "development")
+            or [])
+
+
 def topo_levels(components):
     """Kahn's algorithm → list of levels (each a list of component dicts)."""
     by_name = {c["name"]: c for c in components}
@@ -250,10 +294,11 @@ def validate(manifest):
         if c.get("type", "app") not in ("app", "configmap", "secrets"):
             errors.append(f"{c.get('name', '?')}: unknown type '{c['type']}' "
                           "(app|configmap|secrets)")
-        if not c.get("infra"):
-            errors.append(f"{c.get('name', '?')}: missing 'infra' — bind the "
-                          "component to at least one infrastructures[].id")
-        for ref in c.get("infra", []):
+        bound = resolve_targets(c, token)
+        if not bound:
+            errors.append(f"{c.get('name', '?')}: no deploy targets — declare "
+                          "ci_ids in the repo's .deploy/targets.yml")
+        for ref in bound:
             if ref not in infra_ids:
                 errors.append(f"{c.get('name', '?')}: unknown infrastructure "
                               f"'{ref}'")
@@ -303,11 +348,12 @@ def deploy(manifest, env):
     infra_by_id = {i.get("id"): (e.get("name"), i)
                    for e in envs for i in e.get("infrastructures", [])}
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    token = os.environ.get("GH_TOKEN")
     results = {}
     for i, level in enumerate(topo_levels(manifest["components"]), 1):
         print(f"--- level {i}: {[c['name'] for c in level]}")
         for c in level:
-            bound = c.get("infra") or []
+            bound = resolve_targets(c, token)
             targets = [x for x in bound
                        if infra_by_id.get(x, (None,))[0] == env]
             if not targets:
@@ -375,12 +421,21 @@ def main():
     elif cmd == "version":
         print(manifest["version"])
     elif cmd == "envs":
-        # envs <file> <component> — JSON list of environment names where the
-        # component holds infra bindings (its infra ⊆ environments[].inf ids)
+        # envs <file> <component> [--targets <path>] — JSON list of env names
+        # where the component's ci_ids map to infrastructures; --targets reads
+        # the local .deploy/targets.yml (consumer repo checkout), else the
+        # binding resolves from `infra:` or the repo file at the tag.
         comp = sys.argv[3] if len(sys.argv) > 3 else ""
+        tgt = next((a.split("=", 1)[1] for a in sys.argv
+                    if a.startswith("--targets=")), None)
         c = next((x for x in manifest["components"]
                   if x["name"] == comp), None)
-        infra = set((c or {}).get("infra") or [])
+        if tgt and os.path.exists(tgt):
+            bound = parse_targets(open(tgt, encoding="utf-8").read())
+        else:
+            bound = resolve_targets(c or {},
+                                    os.environ.get("GH_TOKEN"))
+        infra = set(bound)
         print(json.dumps([
             e.get("name") for e in manifest["environments"]
             if any(i.get("id") in infra
