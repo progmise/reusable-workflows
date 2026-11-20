@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ConfigMap-component config files — strict stdlib parser + validator.
 
-Layout (per environment, mirroring the Gluon -cm repos):
+Layout (per environment):
 
   config/
     pre/application-pre.yaml      # flat KEY: value pairs (env-var mode)

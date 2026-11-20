@@ -1,7 +1,7 @@
 name: CM Deploy
 
 # Reusable deploy for ConfigMap components — invoked by each CM repo's thin
-# deploy.yml (workflow_dispatch, or by the deploy-manifest orchestrator).
+# deploy.yml (workflow_dispatch, or by the app-model orchestrator).
 # Reads config/<environment>/application-<environment>.y*ml at the release
 # tag and upserts each KEY as an env var on the target Vercel project
 # (the manifest infra's properties.project, passed by the orchestrator).
