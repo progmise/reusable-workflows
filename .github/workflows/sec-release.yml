@@ -1,0 +1,101 @@
+name: Secrets Release
+
+# Reusable release for Secrets components — invoked by each secrets repo's
+# thin release.yml (workflow_dispatch on main). Validates the version +
+# declaration files and creates the tag + GitHub Release. No image, no
+# build — the deployable unit IS the secrets declaration directory.
+# Releases do NOT deploy — env deploys run through sec-deploy.yml or the
+# orchestrator.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  setup:
+    name: Setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment summary
+        run: |
+          {
+            echo "### Setup"
+            echo "- Repo: \`${{ github.repository }}\` @ \`${{ github.ref_name }}\` (${{ github.sha }})"
+            echo "- Event: ${{ github.event_name }} by ${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate
+    needs: setup
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version
+        id: version
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/validate-release.py \
+            -o validate-release.py && python3 validate-release.py --kind cm
+
+      - name: Validate secrets declarations
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/sec-config.py -o sec-config.py
+          python3 sec-config.py validate secrets
+
+  release:
+    name: Release
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release (creates the tag)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
+
+  # Tracing + Summary close the pipeline (in that order).
+  tracing:
+    name: Tracing
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, release]
+    permissions:
+      actions: read
+    env:
+      OTLP_ENDPOINT: ${{ vars.GRAFANA_OTLP_ENDPOINT }}
+      OTLP_AUTH: ${{ secrets.GRAFANA_OTLP_AUTH }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch telemetry script
+        run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/emit-telemetry.py -o emit-telemetry.py
+
+      - name: Emit run telemetry (OTLP/HTTP)
+        run: python3 emit-telemetry.py
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, validate, release, tracing]
+    steps:
+      - name: Workflow summary
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/ci-summary.py \
+            -o ci-summary.py && python3 ci-summary.py || true

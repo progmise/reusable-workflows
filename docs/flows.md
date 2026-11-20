@@ -23,6 +23,11 @@ flowchart LR
         C_REL["dispatch<br/><code>release.yml</code> caller"]
         C_DEP["dispatch<br/><code>deploy.yml</code> caller"]
     end
+    subgraph SEC["Secrets repos (*-secrets — secret env vars, no code)"]
+        S_PR["PR → main<br/><code>ci.yml</code> caller"]
+        S_REL["dispatch<br/><code>release.yml</code> caller"]
+        S_DEP["dispatch<br/><code>deploy.yml</code> caller"]
+    end
     subgraph RW["reusable-workflows @v1"]
         RW_ACI[app-ci.yml]
         RW_AIN[app-integration.yml]
@@ -34,6 +39,9 @@ flowchart LR
         RW_CCI[cm-ci.yml]
         RW_CRE[cm-release.yml]
         RW_CDE[cm-deploy.yml]
+        RW_SCI[sec-ci.yml]
+        RW_SRE[sec-release.yml]
+        RW_SDE[sec-deploy.yml]
     end
     A_PR --> RW_ACI
     A_PUSH --> RW_AIN
@@ -45,6 +53,9 @@ flowchart LR
     C_PR --> RW_CCI
     C_REL --> RW_CRE
     C_DEP --> RW_CDE
+    S_PR --> RW_SCI
+    S_REL --> RW_SRE
+    S_DEP --> RW_SDE
     subgraph MAN["deploy-manifest repo"]
         M_PR["PR → main<br/><code>ci.yml</code> caller"]
         M_PUSH["merge → main<br/><code>release.yml</code> caller"]
@@ -58,6 +69,7 @@ flowchart LR
     M_DEP --> RW_ODE
     RW_ODE -. "dispatches deploy.yml<br/>per component repo + ci_id" .-> A_DEP
     RW_ODE -. "type: configmap →<br/>+ project input" .-> C_DEP
+    RW_ODE -. "type: secrets →<br/>+ project input" .-> S_DEP
     DASH["deploy-orchestrator UI"]
     DASH -. "API dispatch: version+env+release_no<br/>(pro requires RLSE…)" .-> M_DEP
 ```
@@ -224,6 +236,53 @@ flowchart TD
 
 ---
 
+## Secrets pipelines (`*-secrets` repos — secret env vars, no code)
+
+Secrets repos are the Vercel equivalent of Gluon's Vault-backed secrets:
+`secrets/<env>/secrets-<env>.y*ml` declares **names only** — values live in
+the platform credential store (`<NAME>__<ENV>` keys) and are loaded through
+the dashboard's Seguridad view. Deploying a version resolves each declared
+name to its stored value and upserts it as a `sensitive` env var on the
+*target app's* Vercel project. Values never appear in logs or summaries.
+
+### `sec-ci.yml` — PR checks
+
+```mermaid
+flowchart TD
+    S[Setup] --> V["Validate (sec-config.py)"]
+    V --> T[Tracing]
+    T --> SUM[Summary]
+```
+
+Same gate shape as `cm-ci`: every env file parses as a `secrets:` list of
+`- name: NAME`, names are env-var style, any `value:`/`key:` entry is
+rejected, and the same names exist in every environment file.
+
+### `sec-release.yml` — manual dispatch
+
+Same as `cm-release`: `version.txt` validation (`validate-release.py
+--kind cm`) + declaration validation → tag + GitHub Release. Never deploys.
+
+### `sec-deploy.yml` — manual dispatch or orchestrator
+
+```mermaid
+flowchart TD
+    S[Setup] --> V["Validate (tag + env file)"]
+    V --> D["Deploy {environment}"]
+    D --> T[Tracing]
+    T --> SUM[Summary]
+```
+
+- Same inputs as `cm-deploy` (`version`, `environment`, `ci_id`, `project`).
+- `sec-config.py env <environment>` resolves each declared name to
+  `NAME=value` from the credential store (`SUPABASE_URL` var +
+  `SUPABASE_SERVICE_ROLE_KEY` secret required), piped straight into
+  `vercel-env-sync.py <project> <target> sensitive`. A missing store entry
+  fails the deploy — load it in Seguridad first.
+- Upsert-only, same target mapping (`pro` → `production`, else `preview`).
+
+---
+
 ## Orchestrator pipelines (`deploy-manifest`)
 
 ### `orch-ci.yml` — PR on the manifest
@@ -259,8 +318,9 @@ flowchart TD
 Kahn-sorts components into levels, runs `gh workflow run deploy.yml` on each
 component repo (`ORCHESTRATOR_TOKEN`, needs `actions:write`) and polls each
 run to conclusion before starting the next level. Components with
-`type: configmap` additionally receive `project=<properties.project of the
-bound infra>` and are validated without the Docker Hub image check.
+`type: configmap` or `type: secrets` additionally receive
+`project=<properties.project of the bound infra>` and are validated
+without the Docker Hub image check.
 
 ## Lib pipelines
 
