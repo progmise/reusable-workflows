@@ -2,10 +2,11 @@ name: App Integration
 
 # Reusable integration for API repos — invoked by each API's thin
 # integration.yml on merge to development/main. Publishes the image to Docker
-# Hub tagged with the merge SHA (and :edge on development / :latest on main),
-# then deploys to every NON-production environment in vars.DEPLOY_ENVIRONMENTS
-# (pro is excluded — production deploys go through app-deploy.yml / the
-# orchestrator, never on merge).
+# Hub tagged with the merge SHA (and :edge on development / :latest on main).
+# development merges deploy to cert, main merges deploy to pre — but only
+# when the app's OAM (vars.APP_MODEL_REPO) declares infrastructure for this
+# component in that environment. pro never deploys on merge: production goes
+# through app-deploy.yml / the orchestrator.
 
 on:
   workflow_call:
@@ -61,9 +62,10 @@ jobs:
             echo "\`${IMAGE}:${CHANNEL}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Deploy matrix = DEPLOY_ENVIRONMENTS minus "pro". With the default
-  # ["pro"] the matrix is empty and the job is skipped — non-pro deploys on
-  # merge only happen once the caller lists e.g. ["cert","pre","pro"].
+  # Deploy matrix = the branch's environment (development → cert, main →
+  # pre), provided the app's OAM binds this component to infrastructure in
+  # that environment. Without OAM infra for it the matrix is empty and the
+  # deploy job is skipped.
   deploy-envs:
     name: Deploy environments
     needs: publish-image
@@ -73,12 +75,23 @@ jobs:
     outputs:
       envs: ${{ steps.envs.outputs.envs }}
     steps:
-      - name: Non-pro environments
+      - name: Branch environment (OAM-gated)
         id: envs
         env:
-          ALL: ${{ vars.DEPLOY_ENVIRONMENTS }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.event.repository.name }}
+          APP_MODEL_REPO: ${{ vars.APP_MODEL_REPO }}
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
         run: |
-          envs=$(echo "${ALL:-[\"pro\"]}" | jq -c 'map(select(. != "pro"))')
+          want=cert; [ "$REF_NAME" = "main" ] && want=pre
+          envs='[]'
+          if [ -n "$APP_MODEL_REPO" ]; then
+            gh api "repos/$APP_MODEL_REPO/contents/oam-application-definition.yml"               -H "Accept: application/vnd.github.raw" > /tmp/oam.yml 2>/dev/null               || gh api "repos/$APP_MODEL_REPO/contents/manifest.yml"               -H "Accept: application/vnd.github.raw" > /tmp/oam.yml 2>/dev/null               || true
+            if [ -s /tmp/oam.yml ]; then
+              curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o /tmp/topo.py
+              envs=$(python3 /tmp/topo.py envs /tmp/oam.yml "$REPO"                 | jq -c --arg w "$want" 'map(select(. == $w))' || echo '[]')
+            fi
+          fi
           echo "envs=$envs" >> "$GITHUB_OUTPUT"
 
   deploy:

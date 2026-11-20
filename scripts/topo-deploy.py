@@ -360,6 +360,17 @@ def main():
         sys.exit(0 if ok else 1)
     elif cmd == "version":
         print(manifest["version"])
+    elif cmd == "envs":
+        # envs <file> <component> — JSON list of environment names where the
+        # component holds infra bindings (its infra ⊆ environments[].inf ids)
+        comp = sys.argv[3] if len(sys.argv) > 3 else ""
+        c = next((x for x in manifest["components"]
+                  if x["name"] == comp), None)
+        infra = set((c or {}).get("infra") or [])
+        print(json.dumps([
+            e.get("name") for e in manifest["environments"]
+            if any(i.get("id") in infra
+                   for i in e.get("infrastructures", []))]))
     else:
         fail(__doc__)
 
