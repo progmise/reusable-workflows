@@ -15,8 +15,9 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
 - `.github/workflows/` — reusable workflows (`on: workflow_call` only):
   - libs: `ci.yml`, `integration.yml`, `release.yml`
   - apps (APIs, SPAs, CLIs — anything dockerized): `app-ci.yml` (adds Build image + CSA vs lib ci), `app-integration.yml`
-    (+ Publish Image → Docker Hub + Deploy to non-pro envs from
-    `vars.DEPLOY_ENVIRONMENTS`), `app-release.yml` (+ Publish Image +
+    (+ Publish Image → Docker Hub + Deploy to the branch env — cert on
+    development, pre on main — gated by the component's OAM infra in
+    `vars.APP_MODEL_REPO`), `app-release.yml` (+ Publish Image +
     tag/Release — **never deploys**), `app-deploy.yml` (manual deploy of a
     tag to one env, validated against `DEPLOY_ENVIRONMENTS`)
   - orchestrator: `orch-ci.yml`/`orch-release.yml`/`orch-deploy.yml` — called
@@ -46,7 +47,7 @@ every consumer's CI. Consumer `.github/` dirs intentionally hold only thin
   Central checks for API repos),
   `api-compat.py` (japicmp API diff vs latest Central artifact; `--gate`
   mode fails on semver-violating bumps — used by release.yml),
-  `topo-deploy.py` (`validate`/`plan`/`deploy` for `deploy-manifest` — strict
+  `topo-deploy.py` (`validate`/`plan`/`deploy`/`version`/`envs` for `deploy-manifest` — strict
   stdlib parser for `manifest.yml`: `version` + `environments` (with nested
   `infrastructures`) + `components`; Kahn topo levels, mermaid,
   `gh workflow run` dispatch + conclusion polling). `components[].infra`
