@@ -21,7 +21,7 @@ lives here, versioned via the `v1` tag.
 | `.github/workflows/app-deploy.yml` | `workflow_call` (deployable services): manual deploy of a released tag to one env — Validate (env in `DEPLOY_ENVIRONMENTS` + tag + image) → Deploy (Vercel, `--prod` only for `pro`) → Tracing → Summary |
 | `.github/workflows/cm-ci.yml` / `cm-release.yml` / `cm-deploy.yml` | `workflow_call` (ConfigMap components): validate `config/<env>/` files / release from `version.txt` / upsert env vars into the target Vercel project (`vercel-env-sync.py`) |
 | `.github/workflows/sec-ci.yml` / `sec-release.yml` / `sec-deploy.yml` | `workflow_call` (Secrets components): same shape as `cm-*` — declaration files carry names only; deploy resolves `NAME__ENV` from the credential store and upserts as `sensitive` vars |
-| `.github/workflows/orch-ci.yml` / `orch-release.yml` / `orch-deploy.yml` | `workflow_call` (`deploy-manifest` only): manifest validation + plan → draft Release → topo-sorted dispatch of each component's `deploy.yml` (pro gated by `release_no`) |
+| `.github/workflows/orch-ci.yml` / `orch-release.yml` / `orch-deploy.yml` | `workflow_call` (`<app>-app-model` repos only): manifest validation + plan → draft Release → topo-sorted dispatch of each component's `deploy.yml` (pro gated by `release_no`) |
 | `scripts/*.py` | telemetry + run-summary emitters + validators (`topo-deploy`, `cm-config`, `sec-config`, `vercel-env-sync`, `validate-release`…) — Python stdlib, fetched via curl at `@v1` |
 | `scripts/jitpack-install.sh` | JitPack install step for Maven libs (sdkman maven + `mvn install`) — called from each repo's thin `jitpack.yml` |
 | `init/*.init.gradle.kts` | Gradle init scripts (JaCoCo / dependency-locking / publish+signing), fetched via curl — Maven libs use their `pom.xml` config instead |
@@ -61,7 +61,7 @@ credentials; secret `VERCEL_TOKEN` + vars `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`
 
 Consumers pinning `@v1`: `api-commons`, `java-maven-lib-template` (libs:
 `ci`/`integration`/`release`), `loans-api`, `java-maven-api-template`,
-`node-react-app-template`, `node-express-api-template`, `deploy-orchestrator`,
-`deploy-orchestrator-api` (apps: `app-*`), `vercel-configmap-template` /
+`node-react-app-template`, `node-express-api-template`, `ensemble-web`,
+`ensemble-api` (apps: `app-*`), `vercel-configmap-template` /
 generated `*-cm` repos (`cm-*`), `vercel-secrets-template` / generated
-`*-secrets` repos (`sec-*`), `deploy-manifest` (`orch-*`).
+`*-secrets` repos (`sec-*`), `ensemble-app-model`/`loans-app-model` (`orch-*`).

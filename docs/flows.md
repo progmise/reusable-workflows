@@ -7,7 +7,7 @@ in the Actions UI. Consumers only hold thin callers; all logic lives here.
 
 ```mermaid
 flowchart LR
-    subgraph API["App repos (loans-api, deploy-orchestrator — APIs/SPAs/CLIs)"]
+    subgraph API["App repos (ensemble-api, ensemble-web, loans-api — APIs/SPAs/CLIs)"]
         A_PR["PR → development/main<br/><code>ci.yml</code> caller"]
         A_PUSH["merge → development/main<br/><code>integration.yml</code> caller"]
         A_REL["dispatch<br/><code>release.yml</code> caller"]
@@ -56,7 +56,7 @@ flowchart LR
     S_PR --> RW_SCI
     S_REL --> RW_SRE
     S_DEP --> RW_SDE
-    subgraph MAN["deploy-manifest repo"]
+    subgraph MAN["<app>-app-model repos"]
         M_PR["PR → main<br/><code>ci.yml</code> caller"]
         M_PUSH["merge → main<br/><code>release.yml</code> caller"]
         M_DEP["dispatch<br/><code>deploy.yml</code> caller"]
@@ -70,7 +70,7 @@ flowchart LR
     RW_ODE -. "dispatches deploy.yml<br/>per component repo + ci_id" .-> A_DEP
     RW_ODE -. "type: configmap →<br/>+ project input" .-> C_DEP
     RW_ODE -. "type: secrets →<br/>+ project input" .-> S_DEP
-    DASH["deploy-orchestrator UI"]
+    DASH["ensemble-web UI"]
     DASH -. "API dispatch: version+env+release_no<br/>(pro requires RLSE…)" .-> M_DEP
 ```
 
@@ -182,8 +182,8 @@ flowchart TD
 ## ConfigMap pipelines (`*-cm` repos — env vars, no code)
 
 ConfigMap components hold flat `KEY: value` files under
-`config/<env>/application-<env>.y*ml` — the Vercel equivalent of Gluon's
-K8s ConfigMaps. Deploying a version upserts each key as an environment
+`config/<env>/application-<env>.y*ml` — environment-specific key/value
+sets. Deploying a version upserts each key as an environment
 variable on the *target app's* Vercel project.
 
 ### `cm-ci.yml` — PR checks
@@ -238,8 +238,8 @@ flowchart TD
 
 ## Secrets pipelines (`*-secrets` repos — secret env vars, no code)
 
-Secrets repos are the Vercel equivalent of Gluon's Vault-backed secrets:
-`secrets/<env>/secrets-<env>.y*ml` declares **names only** — values live in
+Secrets repos declare secret **names only**:
+`secrets/<env>/secrets-<env>.y*ml` lists them — values live in
 the platform credential store (`<NAME>__<ENV>` keys) and are loaded through
 the dashboard's Seguridad view. Deploying a version resolves each declared
 name to its stored value and upserts it as a `sensitive` env var on the
@@ -283,7 +283,7 @@ flowchart TD
 
 ---
 
-## Orchestrator pipelines (`deploy-manifest`)
+## Orchestrator pipelines (`<app>-app-model` repos)
 
 ### `orch-ci.yml` — PR on the manifest
 

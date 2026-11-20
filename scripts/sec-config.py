@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Secret-component declaration files — strict stdlib parser + validator.
 
-Layout (per environment, mirroring the Gluon -secrets repos):
+Layout (per environment):
 
   secrets/
     cert/secrets-cert.yaml    # declared secret env-var names for 'cert'

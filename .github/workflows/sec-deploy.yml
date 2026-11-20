@@ -1,7 +1,7 @@
 name: Secrets Deploy
 
 # Reusable deploy for Secrets components — invoked by each secrets repo's
-# thin deploy.yml (workflow_dispatch, or by the deploy-manifest
+# thin deploy.yml (workflow_dispatch, or by the app-model
 # orchestrator). Reads secrets/<environment>/secrets-<environment>.y*ml at
 # the release tag, resolves each declared name to its value from the
 # platform credential store (Supabase Vault — `NAME__ENV` keys), and upserts

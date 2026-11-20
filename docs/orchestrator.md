@@ -1,18 +1,18 @@
 # Deploy Orchestrator — análisis y diseño progmise
 
 > Estado: **implementado** (2026-10-05) — `orch-ci`/`orch-release`/`orch-deploy`
-> + `scripts/topo-deploy.py`, caller repo `progmise/deploy-manifest`.
+> + `scripts/topo-deploy.py`, caller repos `<app>-app-model`.
 > Referencias extraídas de `C:\Users\Leonel\Documents\temporal\e\orchester.zip`
-> (capturas UI Gluon + workflows + logs) y `flow.zip` (capturas de jobs).
+> (capturas del portal de referencia + workflows + logs) y `flow.zip` (capturas de jobs).
 
-## Qué es el sistema de referencia (Santander / Gluon + OAM + Thunder)
+## Qué es el sistema de referencia (portal empresarial + OAM + orquestador de deploys)
 
-### Gluon — portal web (app web propia)
+### Portal web (app propia del sistema de referencia) (app web propia)
 
 - Jerarquía: **Compañía → Aplicaciones → Componentes**.
   Cada aplicación tiene código, alias, unidad de negocio, estado, responsables,
   enlaces a Jira/Confluence/GitHub. Cada **componente** mapea a un repo GitHub
-  (`sar-apiacc-*`), tiene plantilla asociada (ej. "Santander Spring Boot
+  (el repo del componente), tiene plantilla asociada (ej. "Spring Boot
   Microservice 2.2.0"), herramientas (GitHub/Sonar/Fortify/Catalog) y
   garantías (SCA, SAST, JavaMicros).
 - **Equipo**: miembros con roles (product-owner, technical-lead, developer).
@@ -25,7 +25,7 @@
 
 ### Repositorio OAM ("Orchestrated Application Manifest")
 
-- Un repo por aplicación (ej. `sar-apiacc-applicationmodel`) que contiene
+- Un repo por aplicación (ej. `<app>-applicationmodel`) que contiene
   `oam-application-definition.yml` con la versión de release y la lista de
   componentes a desplegar: `{name, version, scmUrl, needs[], state}`.
 
@@ -43,9 +43,9 @@
   `release-version` + `release-number` + `task-number` + `environment`):
   1. `Setup environment variables` — tokens de org/proyecto, properties
      files → JSON de env vars.
-  2. `OAM Deployment Orchestration` — acción compuesta "Thunder":
+  2. `OAM Deployment Orchestration` — acción compuesta de orquestación:
      - `pipeline-frame` (header + correlation-id + métricas OpenSearch)
-     - `gluon-release-validation`: valida release en Gluon API, resuelve
+     - `release-validation`: valida release en la API del portal, resuelve
        environment en el "trail", resuelve task (estado PENDING, tipo
        `other_deployment`, operación DEPLOY), valida ventana de validez
      - `github-validation`: valida release/tag/draft en GitHub
@@ -53,7 +53,7 @@
        de la app para esa release/env
      - `matrix-components`: **topological sort por `needs` → niveles**
        (los del mismo nivel despliegan en paralelo) + diagrama Mermaid
-     - `deploy-orchestrator`: despliega nivel por nivel con polling de estado
+     - `deploy-orchestration`: despliega nivel por nivel con polling de estado
      - `pipeline-frame` (cierre + indexación OpenSearch)
   3. `Notify Deployment`.
 
@@ -65,23 +65,27 @@ GitHub ya cubre la mayor parte de la plataforma: **la UI es GitHub mismo**
 | Pieza enterprise | Equivalente progmise |
 |---|---|
 | Release wizard (RLSE/RTSK) | PR al repo manifiesto + GitHub Release |
-| `oam-application-definition.yml` | repo `deploy-manifest` con `manifest.yml` |
+| `oam-application-definition.yml` | repo `<app>-app-model` (uno por aplicación) |
 | Validación de versión/release | `scripts/` + job Validate en `orch-ci.yml` |
 | Topo-sort + deploy por niveles | `scripts/topo-deploy.py` + `orch-deploy.yml` |
-| deploy-orchestrator + polling | `gh workflow run app-deploy.yml` por repo + poll de conclusión |
+| deploy-orchestration + polling | `gh workflow run app-deploy.yml` por repo + poll de conclusión |
 | Notify Deployment | Step summary (+ webhook opcional a futuro) |
-| Gluon front | `deploy-orchestrator` — SPA React/Vite (UI Gluon-style) + `deploy-orchestrator-api` (Express: GitHub OAuth + allowlist + proxy), containers en Vercel |
+| Portal web | `ensemble-web` — SPA React/Vite + `ensemble-api` (Express: GitHub OAuth + allowlist + proxy), containers en Vercel |
 
-### `deploy-manifest` repo (nuevo)
+### Repos `<app>-app-model` (uno por aplicación)
 
 ```yaml
-# manifest.yml — una "release" desplegable
-version: 1.2.0
-environments:              # targets declarados (opcional)
+# oam-application-definition.yml — una "release" desplegable
+kind: Application
+version: v2
+metadata:
+  name: loans
+  version: 1.2.0
+environments:              # targets declarados
   - name: pro
     type: production
     infrastructures:       # infra nested por ambiente (modelo OAM)
-      - id: loans-api-pro  # equivalente al ci_id de Gluon
+      - id: loans-api-pro  # equivalente al ci_id del sistema de referencia
         type: vercel       # vercel | artifact-store | ...
         properties:        # campos del provider (como OAM)
           project: loans-api
@@ -89,19 +93,21 @@ environments:              # targets declarados (opcional)
 components:
   - name: loans-api-cm
     repo: progmise/loans-api-cm
-    tag: 0.1.0
-    type: configmap        # default: app — CM despacha con `project` y sin docker check
+    version: 0.1.0        # tag/imagen a desplegar (rollback_version opcional)
+    type: configmap       # default: app — CM despacha con `project` y sin docker check
     needs: []
-    infra: [loans-api-pro] # mismos ci_ids del app que configura
   - name: loans-api
     repo: progmise/loans-api
-    tag: 0.1.0            # tag/imagen a desplegar
+    version: 0.1.0
+    rollback_version: 0.0.9
     needs: [loans-api-cm] # el config aterriza antes que el app
-    infra: [loans-api-pro] # opcional — a qué infra despliega (gate por env)
   - name: amortization-api
     repo: progmise/amortization-api
-    tag: 0.2.0
+    version: 0.2.0
     needs: [loans-api]    # despliega después
+# El binding componente -> ci_id vive en cada repo consumidor:
+# .deploy/cd/{cert,pre,pro}/cd.yml  (lista de - ci_id: ...)
+# components[].infra queda como override opcional de compatibilidad.
 ```
 
 ### Workflows nuevos en `reusable-workflows`
@@ -116,10 +122,11 @@ components:
   `topo-deploy.py` produce niveles → por nivel, matrix despacha
   `app-deploy.yml` en cada repo (`gh workflow run` con PAT/token) → poll hasta
   conclusión → Summary con diagrama + resultados.
-- Callers thin en `deploy-manifest/.github/workflows/`.
+- Callers thin en `<app>-app-model/.github/workflows/`.
 - ConfigMap components (`type: configmap`, repos `*-cm` generados desde
   `vercel-configmap-template`): `cm-ci`/`cm-release`/`cm-deploy` — el
-  equivalente Vercel del ConfigMap K8s de Gluon. Despliegan upserting env
+  repositorios
+  de env-vars por ambiente. Despliegan upserting env
   vars en el proyecto Vercel del app (`infra properties.project`), y el app
   los declara en `needs:` para que el config aterrice antes del deploy.
 - Secrets components (`type: secrets`, repos `*-secrets` generados desde
@@ -128,35 +135,33 @@ components:
   (`secrets/<env>/secrets-<env>.y*ml`); los valores viven en el credential
   store (claves `NAME__ENV`, cargados desde la vista Seguridad del
   dashboard con gate por rol) y el deploy los resuelve y upsert como
-  `sensitive` env vars. Misma mecánica de `infra`/`needs`/`project`.
+  `sensitive` env vars. Misma mecánica de binding/`needs`/`project`.
 
 ### Notas de implementación
 
 - `needs` define orden, no paralelismo obligatorio: mismo nivel = matrix
-  paralela (como Thunder).
+  paralela (como el orquestador de referencia).
 - El dispatch cross-repo requiere token con `actions:write` en los repos
   consumidores — PAT fine-grained como secret `ORCHESTRATOR_TOKEN` en
-  `deploy-manifest` (o GitHub App si crece).
-- El "task/ventana de validez" de Gluon se simplifica: el Release del
+  el repo app-model (o GitHub App si crece).
+- El "task/ventana de validez" del sistema de referencia se simplifica: el Release del
   manifiesto (draft→published) es el gate; `environment` es input del
   dispatch (`pro` por defecto, extensible a `cert`/`pre` igual que
   `DEPLOY_ENVIRONMENTS`).
 - Reusar `app-deploy.yml` existente — ya valida tag + imagen en registry y
   despliega a Vercel por `version`.
-- Front: `progmise/deploy-orchestrator` — SPA React/Vite servida por un shell
-  Express que proxea `/api/*` a `progmise/deploy-orchestrator-api`
+- Front: `progmise/ensemble-web` — SPA React/Vite servida por un shell
+  Express que proxea `/api/*` a `progmise/ensemble-api`
   (`API_UPSTREAM`). La API hace OAuth (client_secret server-side, token del
   usuario en cookie HttpOnly), enforcea `ALLOWED_USERS` y proxea
   `/api/gh/*` a la Actions API con ese token. Ambos deployan como container
   en Vercel (preset `Container`; buildea el `Dockerfile` raíz) vía el
   mismo pipeline `app-*`.
 
-## Pendiente al retomar
+## Estado
 
-1. Crear repo `progmise/deploy-manifest` + `manifest.yml` inicial con
-   `loans-api` (y `amortization-api` si migra a workflows `api-*`).
-2. `scripts/topo-deploy.py` (topo-sort + emisión de matriz JSON para
-   `strategy.matrix`).
-3. Los 3 workflows + callers + `v1`.
-4. Decidir si `amortization-api` migra de sus workflows actuales a los
-   callers `app-*` (requiere variante Gradle en `app-ci`/`build`).
+Implementado: repos `<app>-app-model` (ensemble-app-model, loans-app-model),
+`scripts/topo-deploy.py` (topo-sort + matriz JSON), workflows `orch-*` + callers
+thin + tag `v1`. El binding a ci_ids lo declara cada consumidor en
+`.deploy/cd/{env}/cd.yml`; los componentes sin binding en el ambiente
+pedido se saltean en el deploy.
