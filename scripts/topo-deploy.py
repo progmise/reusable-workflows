@@ -31,7 +31,7 @@ Manifest shape (strict):
       infra: [loans-api-pro]     # optional override — ci_ids binding the
                                  # component to infrastructures[].id; when
                                  # omitted they are read from the consumer
-                                 # repo's `.deploy/targets.yml` at the tag
+                                 # repo's `.deploy/cd/{env}/cd.yml` at the tag
       rollback_version: "0.0.9"  # OAM — previous deployable version
   trails:                        # OAM — ordered promotion trails
     - name: pre-pro-trails
@@ -187,22 +187,18 @@ def get(url, token=None):
 
 
 def parse_targets(text):
-    """`.deploy/targets.yml` — a `targets:` key with `  - ci_id` items."""
-    ids, on = [], False
-    for line in text.splitlines():
-        if line.strip() == "targets:":
-            on = True
-        elif on and line.startswith("  - "):
-            ids.append(line[4:].split("#", 1)[0].strip().strip('"'))
-        elif on and line.strip():
-            break
-    return ids
+    """Deploy-target files — `- ci_id: <id>` entries (one line per target;
+    extra fields like `configuration_files` are ignored)."""
+    return [m.group(1).strip().strip('"')
+            for m in re.finditer(r"^\s*-\s*ci_id:\s*(\S+)\s*$", text, re.M)
+            ] or [
+            m.group(1).strip().strip('"')
+            for m in re.finditer(r"^\s+-\s*([\w.-]+)\s*$", text, re.M)]
 
 
-def fetch_targets(repo, token, ref=None):
-    """Raw `.deploy/targets.yml` from repo@ref (default branch when ref None);
-    None on 404 — missing file."""
-    url = (f"https://api.github.com/repos/{repo}/contents/.deploy/targets.yml"
+def fetch_raw(repo, path, token, ref=None):
+    """Raw file text from repo@ref (default branch when ref None); None on 404."""
+    url = (f"https://api.github.com/repos/{repo}/contents/{path}"
            + (f"?ref={ref}" if ref else ""))
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github.raw+json",
@@ -210,9 +206,52 @@ def fetch_targets(repo, token, ref=None):
     })
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            return parse_targets(r.read().decode())
+            return r.read().decode()
     except urllib.error.HTTPError:
         return None
+
+
+def local_targets(path):
+    """`.deploy` (or `.deploy/cd`) dir → all ci_ids — each env subfolder holds
+    its own cd.yml (or targets.yml)."""
+    ids = []
+    if os.path.isfile(path):
+        return parse_targets(open(path, encoding="utf-8").read())
+    for entry in sorted(os.listdir(path)) if os.path.isdir(path) else []:
+        sub = os.path.join(path, entry)
+        for name in ("cd.yml", "targets.yml"):
+            f = os.path.join(sub, name)
+            if os.path.isdir(sub) and os.path.isfile(f):
+                ids += parse_targets(open(f, encoding="utf-8").read())
+                break
+    return ids
+
+
+def fetch_targets(repo, token, ref=None):
+    """Deploy-target ci_ids declared by repo@ref under `.deploy` — the
+    `.deploy/cd/{env}/cd.yml` per-environment folder layout (legacy flat
+    `.deploy/targets.yml` / `.deploy/{env}/targets.yml` also read).
+    Returns [] when nothing is declared."""
+    ids = []
+    listing, code = get(
+        f"https://api.github.com/repos/{repo}/contents/.deploy/cd"
+        + (f"?ref={ref}" if ref else ""), token)
+    if code == 200:
+        for entry in listing if isinstance(listing, list) else []:
+            if entry.get("type") == "dir":
+                ids += parse_targets(fetch_raw(
+                    repo, f"{entry['path']}/cd.yml", token, ref) or "")
+    listing, code = get(
+        f"https://api.github.com/repos/{repo}/contents/.deploy"
+        + (f"?ref={ref}" if ref else ""), token)
+    if code == 200:
+        for entry in listing if isinstance(listing, list) else []:
+            if entry.get("type") == "file" and entry.get("name") == "targets.yml":
+                ids += parse_targets(fetch_raw(repo, entry["path"], token, ref) or "")
+            elif entry.get("type") == "dir" and entry.get("name") != "cd":
+                ids += parse_targets(fetch_raw(
+                    repo, f"{entry['path']}/targets.yml", token, ref) or "")
+    return ids
 
 
 def resolve_targets(c, token):
@@ -297,7 +336,7 @@ def validate(manifest):
         bound = resolve_targets(c, token)
         if not bound:
             errors.append(f"{c.get('name', '?')}: no deploy targets — declare "
-                          "ci_ids in the repo's .deploy/targets.yml")
+                          "ci_ids in the repo's .deploy/cd/{env}/cd.yml")
         for ref in bound:
             if ref not in infra_ids:
                 errors.append(f"{c.get('name', '?')}: unknown infrastructure "
@@ -357,8 +396,10 @@ def deploy(manifest, env):
             targets = [x for x in bound
                        if infra_by_id.get(x, (None,))[0] == env]
             if not targets:
-                return results, False, (f"{c['name']}: no infrastructure "
-                                        f"binding for env '{env}'")
+                print(f"{c['name']}: no infrastructure binding for env "
+                      f"'{env}' — skipped")
+                results[c["name"]] = "skipped (no binding)"
+                continue
             for ci_id in targets:
                 args = ["workflow", "run", "deploy.yml", "-R", c["repo"],
                         "-f", f"version={c['tag']}", "-f", f"environment={env}",
@@ -369,7 +410,9 @@ def deploy(manifest, env):
                     args += ["-f", f"project={props.get('project', '')}"]
                 gh(*args)
                 print(f"dispatched {c['repo']}@{c['tag']} → {env} ({ci_id})")
-        for c in level:  # poll every component of the level to conclusion
+        for c in level:  # poll every dispatched component to conclusion
+            if results.get(c["name"]) == "skipped (no binding)":
+                continue
             run = None
             for _ in range(120):  # up to ~20 min per component
                 run = latest_run(c["repo"], ts)
@@ -431,7 +474,7 @@ def main():
         c = next((x for x in manifest["components"]
                   if x["name"] == comp), None)
         if tgt and os.path.exists(tgt):
-            bound = parse_targets(open(tgt, encoding="utf-8").read())
+            bound = local_targets(tgt)
         else:
             bound = resolve_targets(c or {},
                                     os.environ.get("GH_TOKEN"))

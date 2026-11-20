@@ -90,7 +90,7 @@ jobs:
             gh api "repos/$APP_MODEL_REPO/contents/oam-application-definition.yml"               -H "Accept: application/vnd.github.raw" > /tmp/oam.yml 2>/dev/null               || gh api "repos/$APP_MODEL_REPO/contents/manifest.yml"               -H "Accept: application/vnd.github.raw" > /tmp/oam.yml 2>/dev/null               || true
             if [ -s /tmp/oam.yml ]; then
               curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o /tmp/topo.py
-              envs=$(python3 /tmp/topo.py envs /tmp/oam.yml "$REPO" --targets .deploy/targets.yml                 | jq -c --arg w "$want" 'map(select(. == $w))' || echo '[]')
+              envs=$(python3 /tmp/topo.py envs /tmp/oam.yml "$REPO" --targets .deploy/cd                 | jq -c --arg w "$want" 'map(select(. == $w))' || echo '[]')
             fi
           fi
           echo "envs=$envs" >> "$GITHUB_OUTPUT"
