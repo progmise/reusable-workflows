@@ -29,6 +29,14 @@ Manifest shape (strict):
       needs: [other-api]
       infra: [loans-api-pro]       # required — ci_ids binding the component to
                                    # infrastructures[].id (which env it deploys to)
+      rollback_version: "0.0.9"    # OAM — previous deployable version
+  trails:                          # OAM — ordered promotion trails
+    - name: pre-pro-trails
+      environments:
+        - name: pre
+          order: 1
+        - name: pro
+          order: 2
 """
 import json
 import os
