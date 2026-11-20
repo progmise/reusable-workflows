@@ -18,6 +18,11 @@ flowchart LR
         L_PUSH["merge → development/main<br/><code>integration.yml</code> caller"]
         L_REL["dispatch<br/><code>release.yml</code> caller"]
     end
+    subgraph CM["ConfigMap repos (*-cm — env vars, no code)"]
+        C_PR["PR → main<br/><code>ci.yml</code> caller"]
+        C_REL["dispatch<br/><code>release.yml</code> caller"]
+        C_DEP["dispatch<br/><code>deploy.yml</code> caller"]
+    end
     subgraph RW["reusable-workflows @v1"]
         RW_ACI[app-ci.yml]
         RW_AIN[app-integration.yml]
@@ -26,6 +31,9 @@ flowchart LR
         RW_CI[ci.yml]
         RW_IN[integration.yml]
         RW_RE[release.yml]
+        RW_CCI[cm-ci.yml]
+        RW_CRE[cm-release.yml]
+        RW_CDE[cm-deploy.yml]
     end
     A_PR --> RW_ACI
     A_PUSH --> RW_AIN
@@ -34,6 +42,9 @@ flowchart LR
     L_PR --> RW_CI
     L_PUSH --> RW_IN
     L_REL --> RW_RE
+    C_PR --> RW_CCI
+    C_REL --> RW_CRE
+    C_DEP --> RW_CDE
     subgraph MAN["deploy-manifest repo"]
         M_PR["PR → main<br/><code>ci.yml</code> caller"]
         M_PUSH["merge → main<br/><code>release.yml</code> caller"]
@@ -46,6 +57,7 @@ flowchart LR
     M_PUSH --> RW_ORE
     M_DEP --> RW_ODE
     RW_ODE -. "dispatches deploy.yml<br/>per component repo + ci_id" .-> A_DEP
+    RW_ODE -. "type: configmap →<br/>+ project input" .-> C_DEP
     DASH["deploy-orchestrator UI"]
     DASH -. "API dispatch: version+env+release_no<br/>(pro requires RLSE…)" .-> M_DEP
 ```
@@ -155,6 +167,63 @@ flowchart TD
 
 ---
 
+## ConfigMap pipelines (`*-cm` repos — env vars, no code)
+
+ConfigMap components hold flat `KEY: value` files under
+`config/<env>/application-<env>.y*ml` — the Vercel equivalent of Gluon's
+K8s ConfigMaps. Deploying a version upserts each key as an environment
+variable on the *target app's* Vercel project.
+
+### `cm-ci.yml` — PR checks
+
+```mermaid
+flowchart TD
+    S[Setup] --> V["Validate (cm-config.py)"]
+    V --> T[Tracing]
+    T --> SUM[Summary]
+```
+
+Validation is the whole pipeline: every env file parses as flat
+`KEY: value`, keys are env-var style, no secret-looking keys
+(`*_PASSWORD`/`*_SECRET`/`*_TOKEN`/`PRIVATE_KEY`), and the same key set
+exists in every environment file.
+
+### `cm-release.yml` — manual dispatch
+
+```mermaid
+flowchart TD
+    S[Setup] --> V["Validate (version.txt + config)"]
+    V --> R[Release]
+    R --> T[Tracing]
+    T --> SUM[Summary]
+```
+
+Version lives in `version.txt` (`validate-release.py --kind cm` — semver,
+tag/release doesn't exist, monotonic). Creates the tag + GitHub Release.
+Never deploys.
+
+### `cm-deploy.yml` — manual dispatch or orchestrator
+
+```mermaid
+flowchart TD
+    S[Setup] --> V["Validate (tag + env file)"]
+    V --> D["Deploy {environment}"]
+    D --> T[Tracing]
+    T --> SUM[Summary]
+```
+
+- Inputs: `version` (tag must exist), `environment` (a `config/<env>/` dir
+  must exist), `ci_id`, `project` — the Vercel project name from the
+  manifest infra's `properties.project`; the orchestrator passes it,
+  manual dispatches must supply it.
+- `cm-config.py env <environment>` dumps `KEY=value`, piped to
+  `vercel-env-sync.py` → `POST /v10/projects/{project}/env?upsert=true`
+  per key. `pro` → Vercel target `production`; anything else → `preview`.
+- Upsert-only: keys removed from the file are NOT deleted from Vercel.
+- Deploy job is skipped when `VERCEL_ORG_ID` is unset.
+
+---
+
 ## Orchestrator pipelines (`deploy-manifest`)
 
 ### `orch-ci.yml` — PR on the manifest
@@ -189,7 +258,9 @@ flowchart TD
 `topo-deploy.py deploy` checks out `manifest.yml` at the release tag,
 Kahn-sorts components into levels, runs `gh workflow run deploy.yml` on each
 component repo (`ORCHESTRATOR_TOKEN`, needs `actions:write`) and polls each
-run to conclusion before starting the next level.
+run to conclusion before starting the next level. Components with
+`type: configmap` additionally receive `project=<properties.project of the
+bound infra>` and are validated without the Docker Hub image check.
 
 ## Lib pipelines
 
