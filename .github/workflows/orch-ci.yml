@@ -1,8 +1,10 @@
 name: Orchestrator CI
 
-# Reusable — called by the deploy-manifest repo on PRs to main.
-# Validates manifest.yml end to end: schema, semver, version not already
-# released, every component repo:tag exists, every image exists on Docker Hub.
+# Reusable — called by each app-model repo on PRs to main.
+# Validates the OAM definition end to end: schema, semver, version not
+# already released, every component repo:tag exists, every image exists on
+# Docker Hub. Reads oam-application-definition.yml, or manifest.yml on
+# repos not yet migrated.
 on:
   workflow_call:
 
@@ -19,17 +21,23 @@ jobs:
       - name: Fetch topo-deploy script
         run: curl -sfL https://raw.githubusercontent.com/progmise/reusable-workflows/v1/scripts/topo-deploy.py -o topo-deploy.py
 
+      - name: Manifest file
+        run: |
+          M=manifest.yml
+          [ -f oam-application-definition.yml ] && M=oam-application-definition.yml
+          echo "MANIFEST=$M" >> "$GITHUB_ENV"
+
       - name: Validate manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
-        run: python topo-deploy.py validate manifest.yml
+        run: python topo-deploy.py validate "$MANIFEST"
 
       - name: Version not already released
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER=$(grep -E '^version:' manifest.yml | cut -d' ' -f2 | tr -d '"')
+          VER=$(python topo-deploy.py version "$MANIFEST")
           if gh release view "v$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
              gh release view "$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "::error::release v$VER already exists in $GITHUB_REPOSITORY"
@@ -38,4 +46,4 @@ jobs:
           echo "version $VER is new"
 
       - name: Deploy plan
-        run: python topo-deploy.py plan manifest.yml
+        run: python topo-deploy.py plan "$MANIFEST"

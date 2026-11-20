@@ -29,6 +29,14 @@ Manifest shape (strict):
       needs: [other-api]
       infra: [loans-api-pro]       # required — ci_ids binding the component to
                                    # infrastructures[].id (which env it deploys to)
+      rollback_version: "0.0.9"    # OAM — previous deployable version
+  trails:                          # OAM — ordered promotion trails
+    - name: pre-pro-trails
+      environments:
+        - name: pre
+          order: 1
+        - name: pro
+          order: 2
 """
 import json
 import os
@@ -39,8 +47,11 @@ import time
 import urllib.request
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-SECTIONS = ("components", "environments")
+SECTIONS = ("components", "environments", "trails")
 LIST_FIELDS = {"needs", "infra"}
+# Nested object list inside a section item — environments carry
+# `infrastructures:`, trails carry ordered `environments:`.
+SUB_LISTS = {"environments": "infrastructures", "trails": "environments"}
 
 
 def parse(path):
@@ -50,19 +61,24 @@ def parse(path):
     `  - `, item fields at `    `, and inside an environment item an
     `infrastructures:` list whose entries sit at `      - ` with fields
     at `        ` — plus a `properties:` map at `        ` whose keys
-    live at `          `.
+    live at `          `. OAM files additionally allow `kind:` and a
+    `metadata:` map at column 0; `metadata.version` is the release version
+    (top-level `version:` stays as the OAM schema marker / legacy fallback)
+    and a component's `version:` is its deploy tag (`rollback_version` is a
+    plain scalar field).
     """
     manifest = {s: [] for s in SECTIONS}
     section = None
     current = None      # open item of the current section
-    sub = None          # open infrastructures[] item
-    in_sub = False      # inside an environment's infrastructures: list
+    sub = None          # open sub-list item (infrastructure / trail env)
+    sub_key = None      # field name of the open sub-list
+    in_sub = False      # inside a section's nested list
     in_props = False    # inside an infra item's properties: map
 
     def flush_sub():
-        nonlocal sub, in_sub, in_props
+        nonlocal sub, sub_key, in_sub, in_props
         if sub is not None:
-            current["infrastructures"].append(sub)
+            current[sub_key].append(sub)
             sub = None
         in_sub = in_props = False
 
@@ -84,16 +100,20 @@ def parse(path):
                 manifest["version"] = line.split(":", 1)[1].strip().strip('"')
             elif key_val and key_val.group(1) in SECTIONS:
                 section = key_val.group(1)
+            elif key_val and key_val.group(1) == "metadata":
+                section = "metadata"
+            elif key_val and key_val.group(1) == "kind":
+                manifest["kind"] = key_val.group(2).strip().strip('"')
             else:
                 fail(f"line {n}: unexpected content: {raw.rstrip()}")
         elif line.startswith("      - ") and in_sub and current is not None:
             if sub is not None:
-                current["infrastructures"].append(sub)
+                current[sub_key].append(sub)
             sub = {}
             in_props = False
             m = re.match(r"^      - (\w[\w-]*):\s*(.*)$", line)
             if not m:
-                fail(f"line {n}: bad infrastructure entry: {raw.rstrip()}")
+                fail(f"line {n}: bad {sub_key} entry: {raw.rstrip()}")
             sub[m.group(1)] = m.group(2).strip().strip('"')
         elif line.startswith("          ") and in_props and sub is not None \
                 and key_val:
@@ -107,7 +127,10 @@ def parse(path):
             else:
                 in_props = False
                 sub[k] = v.strip('"')
-        elif line.startswith("  - ") and section:
+        elif line.startswith("  ") and section == "metadata" and key_val:
+            manifest.setdefault("metadata", {})[key_val.group(1)] = \
+                key_val.group(2).strip().strip('"')
+        elif line.startswith("  - ") and section and section != "metadata":
             flush_item()
             current = {}
             m = re.match(r"^  - (\w[\w-]*):\s*(.*)$", line)
@@ -116,9 +139,10 @@ def parse(path):
             current[m.group(1)] = m.group(2).strip().strip('"')
         elif line.startswith("    ") and current is not None and key_val:
             k, v = key_val.group(1), key_val.group(2).strip()
-            if k == "infrastructures" and not v and section == "environments":
-                current.setdefault("infrastructures", [])
+            if not v and k == SUB_LISTS.get(section):
+                current.setdefault(k, [])
                 in_sub = True
+                sub_key = k
             else:
                 flush_sub()
                 if k in LIST_FIELDS:
@@ -129,6 +153,11 @@ def parse(path):
         else:
             fail(f"line {n}: unexpected content: {raw.rstrip()}")
     flush_item()
+    meta = manifest.get("metadata") or {}
+    if meta.get("version"):
+        manifest["version"] = meta["version"]
+    for c in manifest["components"]:
+        c.setdefault("tag", c.get("version", ""))
     return manifest
 
 
@@ -329,6 +358,8 @@ def main():
                 f"### Deploy {manifest['version']} → `{env}`\n\n"
                 + "\n".join(f"- {n}: {u}" for n, u in results.items()) + "\n")
         sys.exit(0 if ok else 1)
+    elif cmd == "version":
+        print(manifest["version"])
     else:
         fail(__doc__)
 
